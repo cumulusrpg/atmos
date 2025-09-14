@@ -49,15 +49,15 @@ func (e *Engine) Emit(event Event) bool {
 	}
 	// No validators or all validators passed - commit the event
 	e.events = append(e.events, event)
-	
+
 	// Call listeners after commitment
 	listeners, hasListeners := e.listeners[event.Type()]
 	if hasListeners {
 		for _, listener := range listeners {
-			listener.Handle(event, e)
+			listener.Handle(event, e.events, e)
 		}
 	}
-	
+
 	return true
 }
 
