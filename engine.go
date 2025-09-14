@@ -5,9 +5,10 @@ import "encoding/json"
 // Engine coordinates event emission, validation, and commitment
 type Engine struct {
 	events         []Event
-	validators     map[string][]EventValidator // event type -> validators
-	listeners      map[string][]EventListener  // event type -> listeners
-	eventFactories map[string]func() Event     // event type -> factory function
+	validators     map[string][]EventValidator   // event type -> validators
+	listeners      map[string][]EventListener    // event type -> listeners
+	projections    map[string]EventProjection    // projection name -> projection
+	eventFactories map[string]func() Event       // event type -> factory function
 }
 
 // NewEngine creates a new engine instance
@@ -16,6 +17,7 @@ func NewEngine() *Engine {
 		events:         make([]Event, 0),
 		validators:     make(map[string][]EventValidator),
 		listeners:      make(map[string][]EventListener),
+		projections:    make(map[string]EventProjection),
 		eventFactories: make(map[string]func() Event),
 	}
 }
@@ -33,6 +35,26 @@ func (e *Engine) RegisterListener(eventType string, listener EventListener) {
 // RegisterEventType registers a factory function for a specific event type
 func (e *Engine) RegisterEventType(eventType string, factory func() Event) {
 	e.eventFactories[eventType] = factory
+}
+
+// RegisterProjection registers a projection by name
+func (e *Engine) RegisterProjection(name string, projection EventProjection) {
+	e.projections[name] = projection
+}
+
+// Project runs a named projection on the current event log
+func (e *Engine) Project(name string) interface{} {
+	projection, exists := e.projections[name]
+	if !exists {
+		return nil
+	}
+
+	state := projection.InitialState()
+	for _, event := range e.events {
+		state = projection.Reduce(state, event)
+	}
+
+	return state
 }
 
 // Emit attempts to emit an event through validation and commitment

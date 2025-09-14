@@ -70,3 +70,9 @@ func NewTypedValidator[T Event](validator TypedEventValidator[T]) EventValidator
 func NewTypedListener[T Event](listener TypedEventListener[T]) EventListener {
 	return ListenerWrapper[T]{listener: listener}
 }
+
+// EventProjection transforms events into state through reduction
+type EventProjection interface {
+	InitialState() interface{}
+	Reduce(state interface{}, event Event) interface{}
+}
