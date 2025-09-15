@@ -1,6 +1,9 @@
 package atmos
 
-import "time"
+import (
+	"math/rand"
+	"time"
+)
 
 // Framework types that could eventually move to the atmos package
 
@@ -23,22 +26,22 @@ type EventEmitter interface {
 
 // EventValidator validates whether an event should be committed to the log
 type EventValidator interface {
-	Validate(event Event, eventLog []Event, emitter EventEmitter) bool
+	Validate(engine *Engine, event Event) bool
 }
 
 // EventListener responds to events after they are committed
 type EventListener interface {
-	Handle(event Event, eventLog []Event, emitter EventEmitter)
+	Handle(engine *Engine, event Event)
 }
 
 // TypedEventValidator validates a specific event type with type safety
 type TypedEventValidator[T Event] interface {
-	ValidateTyped(event T, eventLog []Event, emitter EventEmitter) bool
+	ValidateTyped(engine *Engine, event T) bool
 }
 
 // TypedEventListener handles a specific event type with type safety
 type TypedEventListener[T Event] interface {
-	HandleTyped(event T, eventLog []Event, emitter EventEmitter)
+	HandleTyped(engine *Engine, event T)
 }
 
 // ValidatorWrapper wraps a typed validator to implement the base interface
@@ -46,9 +49,9 @@ type ValidatorWrapper[T Event] struct {
 	validator TypedEventValidator[T]
 }
 
-func (w ValidatorWrapper[T]) Validate(event Event, eventLog []Event, emitter EventEmitter) bool {
+func (w ValidatorWrapper[T]) Validate(engine *Engine, event Event) bool {
 	typedEvent := event.(T) // Safe cast - engine ensures correct type
-	return w.validator.ValidateTyped(typedEvent, eventLog, emitter)
+	return w.validator.ValidateTyped(engine, typedEvent)
 }
 
 // ListenerWrapper wraps a typed listener to implement the base interface
@@ -56,9 +59,9 @@ type ListenerWrapper[T Event] struct {
 	listener TypedEventListener[T]
 }
 
-func (w ListenerWrapper[T]) Handle(event Event, eventLog []Event, emitter EventEmitter) {
+func (w ListenerWrapper[T]) Handle(engine *Engine, event Event) {
 	typedEvent := event.(T) // Safe cast - engine ensures correct type
-	w.listener.HandleTyped(typedEvent, eventLog, emitter)
+	w.listener.HandleTyped(engine, typedEvent)
 }
 
 // NewTypedValidator creates a wrapper for a typed validator
@@ -75,4 +78,38 @@ func NewTypedListener[T Event](listener TypedEventListener[T]) EventListener {
 type EventProjection interface {
 	InitialState() interface{}
 	Reduce(state interface{}, event Event) interface{}
+}
+
+// Context interfaces for explicit dependency injection
+
+// EventLogContext provides access to the event log for validation/projection
+type EventLogContext interface {
+	GetEvents() []Event
+}
+
+// EmitterContext provides controlled event emission capability
+type EmitterContext interface {
+	Emit(event Event) bool
+}
+
+// RandomContext provides controlled randomness injection
+type RandomContext interface {
+	Intn(n int) int
+	Float64() float64
+}
+
+// ProjectorContext provides access to registered projections
+type ProjectorContext interface {
+	Project(name string) interface{}
+}
+
+// DefaultRandomContext provides real randomness using math/rand
+type DefaultRandomContext struct{}
+
+func (r DefaultRandomContext) Intn(n int) int {
+	return rand.Intn(n)
+}
+
+func (r DefaultRandomContext) Float64() float64 {
+	return rand.Float64()
 }

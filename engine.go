@@ -9,17 +9,36 @@ type Engine struct {
 	listeners      map[string][]EventListener    // event type -> listeners
 	projections    map[string]EventProjection    // projection name -> projection
 	eventFactories map[string]func() Event       // event type -> factory function
+	randomSource   RandomContext                 // injected randomness
 }
 
-// NewEngine creates a new engine instance
-func NewEngine() *Engine {
-	return &Engine{
+// EngineOption configures engine construction
+type EngineOption func(*Engine)
+
+// WithRandomSource sets a custom random source
+func WithRandomSource(randomSource RandomContext) EngineOption {
+	return func(e *Engine) {
+		e.randomSource = randomSource
+	}
+}
+
+// NewEngine creates a new engine with optional configuration
+func NewEngine(opts ...EngineOption) *Engine {
+	engine := &Engine{
 		events:         make([]Event, 0),
 		validators:     make(map[string][]EventValidator),
 		listeners:      make(map[string][]EventListener),
 		projections:    make(map[string]EventProjection),
 		eventFactories: make(map[string]func() Event),
+		randomSource:   DefaultRandomContext{}, // default
 	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(engine)
+	}
+
+	return engine
 }
 
 // RegisterValidator registers a validator for a specific event type
@@ -64,7 +83,7 @@ func (e *Engine) Emit(event Event) bool {
 	if exists {
 		// All validators must approve
 		for _, validator := range validators {
-			if !validator.Validate(event, e.events, e) {
+			if !validator.Validate(e, event) {
 				return false // validation failed
 			}
 		}
@@ -76,7 +95,7 @@ func (e *Engine) Emit(event Event) bool {
 	listeners, hasListeners := e.listeners[event.Type()]
 	if hasListeners {
 		for _, listener := range listeners {
-			listener.Handle(event, e.events, e)
+			listener.Handle(e, event)
 		}
 	}
 
@@ -86,6 +105,16 @@ func (e *Engine) Emit(event Event) bool {
 // GetEvents returns all events in the system
 func (e *Engine) GetEvents() []Event {
 	return append([]Event{}, e.events...)
+}
+
+// Intn provides access to randomness for validators/listeners
+func (e *Engine) Intn(n int) int {
+	return e.randomSource.Intn(n)
+}
+
+// Float64 provides access to randomness for validators/listeners
+func (e *Engine) Float64() float64 {
+	return e.randomSource.Float64()
 }
 
 // SetEvents sets the events directly (for rebuilding from event log)
