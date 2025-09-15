@@ -117,6 +117,11 @@ func (e *Engine) Float64() float64 {
 	return e.randomSource.Float64()
 }
 
+// RollDie provides dice rolling (1-6) using the injected randomness
+func (e *Engine) RollDie() int {
+	return e.randomSource.Intn(6) + 1
+}
+
 // SetEvents sets the events directly (for rebuilding from event log)
 func (e *Engine) SetEvents(events []Event) {
 	e.events = append([]Event{}, events...)
