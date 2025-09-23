@@ -1,6 +1,25 @@
 package atmos
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"sort"
+)
+
+// StateReducer represents a function that reduces an event into a state
+type StateReducer func(engine *Engine, state interface{}, event Event) interface{}
+
+// OrderedReducer holds a reducer with its execution priority
+type OrderedReducer struct {
+	StateName string
+	Reducer   StateReducer
+	Priority  int // lower numbers execute first
+}
+
+// StateRegistry holds state and its reducers
+type StateRegistry struct {
+	InitialState interface{}
+	Reducers     map[string]StateReducer // event type -> reducer function
+}
 
 // Engine coordinates event emission, validation, and commitment
 type Engine struct {
@@ -8,6 +27,8 @@ type Engine struct {
 	validators     map[string][]EventValidator   // event type -> validators
 	listeners      map[string][]EventListener    // event type -> listeners
 	projections    map[string]EventProjection    // projection name -> projection
+	states         map[string]StateRegistry      // state name -> state registry
+	orderedReducers map[string][]OrderedReducer  // event type -> ordered reducers
 	eventFactories map[string]func() Event       // event type -> factory function
 	randomSource   RandomContext                 // injected randomness
 }
@@ -25,12 +46,14 @@ func WithRandomSource(randomSource RandomContext) EngineOption {
 // NewEngine creates a new engine with optional configuration
 func NewEngine(opts ...EngineOption) *Engine {
 	engine := &Engine{
-		events:         make([]Event, 0),
-		validators:     make(map[string][]EventValidator),
-		listeners:      make(map[string][]EventListener),
-		projections:    make(map[string]EventProjection),
-		eventFactories: make(map[string]func() Event),
-		randomSource:   DefaultRandomContext{}, // default
+		events:          make([]Event, 0),
+		validators:      make(map[string][]EventValidator),
+		listeners:       make(map[string][]EventListener),
+		projections:     make(map[string]EventProjection),
+		states:          make(map[string]StateRegistry),
+		orderedReducers: make(map[string][]OrderedReducer),
+		eventFactories:  make(map[string]func() Event),
+		randomSource:    DefaultRandomContext{}, // default
 	}
 
 	// Apply options
@@ -61,6 +84,30 @@ func (e *Engine) RegisterProjection(name string, projection EventProjection) {
 	e.projections[name] = projection
 }
 
+// RegisterState registers a state with reducers by name
+func (e *Engine) RegisterState(name string, initialState interface{}, reducers map[string]StateReducer) {
+	e.states[name] = StateRegistry{
+		InitialState: initialState,
+		Reducers:     reducers,
+	}
+}
+
+// RegisterOrderedReducer registers a reducer with priority for cross-state coordination
+func (e *Engine) RegisterOrderedReducer(eventType, stateName string, reducer StateReducer, priority int) {
+	orderedReducer := OrderedReducer{
+		StateName: stateName,
+		Reducer:   reducer,
+		Priority:  priority,
+	}
+
+	e.orderedReducers[eventType] = append(e.orderedReducers[eventType], orderedReducer)
+
+	// Sort by priority after adding
+	sort.Slice(e.orderedReducers[eventType], func(i, j int) bool {
+		return e.orderedReducers[eventType][i].Priority < e.orderedReducers[eventType][j].Priority
+	})
+}
+
 // Project runs a named projection on the current event log
 func (e *Engine) Project(name string) interface{} {
 	projection, exists := e.projections[name]
@@ -75,6 +122,36 @@ func (e *Engine) Project(name string) interface{} {
 
 	return state
 }
+
+// GetState runs reducers on the current event log for a state
+func (e *Engine) GetState(name string) interface{} {
+	registry, exists := e.states[name]
+	if !exists {
+		return nil
+	}
+
+	state := registry.InitialState
+	for _, event := range e.events {
+		// Check if there are ordered reducers for this event type
+		if orderedReducers, hasOrdered := e.orderedReducers[event.Type()]; hasOrdered {
+			// Apply ordered reducers for this state name only
+			for _, orderedReducer := range orderedReducers {
+				if orderedReducer.StateName == name {
+					state = orderedReducer.Reducer(e, state, event)
+				}
+			}
+		} else {
+			// Use regular reducers
+			reducer, hasReducer := registry.Reducers[event.Type()]
+			if hasReducer {
+				state = reducer(e, state, event)
+			}
+		}
+	}
+
+	return state
+}
+
 
 // Emit attempts to emit an event through validation and commitment
 func (e *Engine) Emit(event Event) bool {
