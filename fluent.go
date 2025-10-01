@@ -53,3 +53,48 @@ func (r *EventRegistration) WithEventFactory(factory func() Event) *EventRegistr
 	r.engine.RegisterEventType(r.eventType, factory)
 	return r
 }
+
+// English-like aliases for better readability
+
+// When is an alias for Event() to read more naturally with optional event factory
+// Usage: When("player_registered").Requires(...).Then(...)
+// Or: When("player_registered", func() Event { return &MyEvent{} }).Requires(...)
+func (e *Engine) When(eventType string, factory ...func() Event) *EventRegistration {
+	reg := e.Event(eventType)
+	if len(factory) > 0 {
+		reg.WithEventFactory(factory[0])
+	}
+	return reg
+}
+
+// Requires is an alias for WithValidator() to read like a requirement
+// Usage: When("player_registered").Requires(Valid(&MyValidator{}))
+func (r *EventRegistration) Requires(validator EventValidator) *EventRegistration {
+	return r.WithValidator(validator)
+}
+
+// Then is an alias for WithListener() to read like a consequence
+// Usage: When("player_registered").Then(Do(&MyListener{}))
+func (r *EventRegistration) Then(listener EventListener) *EventRegistration {
+	return r.WithListener(listener)
+}
+
+// Updates is an alias for WithReducer() to describe state changes
+// Usage: When("player_registered").Updates("players", reducer)
+func (r *EventRegistration) Updates(stateName string, reducer StateReducer) *EventRegistration {
+	return r.WithReducer(stateName, reducer)
+}
+
+// Helper functions for wrapping typed validators and listeners
+
+// Valid wraps a typed validator for use with Requires()
+// Usage: Requires(Valid(&MyValidator{}))
+func Valid[T Event](validator TypedEventValidator[T]) EventValidator {
+	return NewTypedValidator(validator)
+}
+
+// Do wraps a typed listener for use with Then()
+// Usage: Then(Do(&MyListener{}))
+func Do[T Event](listener TypedEventListener[T]) EventListener {
+	return NewTypedListener(listener)
+}
