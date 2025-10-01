@@ -68,15 +68,23 @@ func (e *Engine) When(eventType string, factory ...func() Event) *EventRegistrat
 }
 
 // Requires is an alias for WithValidator() to read like a requirement
-// Usage: When("player_registered").Requires(Valid(&MyValidator{}))
-func (r *EventRegistration) Requires(validator EventValidator) *EventRegistration {
-	return r.WithValidator(validator)
+// Accepts multiple validators for convenience
+// Usage: When("player_registered").Requires(Valid(&MyValidator{}), Valid(&AnotherValidator{}))
+func (r *EventRegistration) Requires(validators ...EventValidator) *EventRegistration {
+	for _, validator := range validators {
+		r.WithValidator(validator)
+	}
+	return r
 }
 
 // Then is an alias for WithListener() to read like a consequence
-// Usage: When("player_registered").Then(Do(&MyListener{}))
-func (r *EventRegistration) Then(listener EventListener) *EventRegistration {
-	return r.WithListener(listener)
+// Accepts multiple listeners for convenience
+// Usage: When("player_registered").Then(Do(&MyListener{}), Do(&AnotherListener{}))
+func (r *EventRegistration) Then(listeners ...EventListener) *EventRegistration {
+	for _, listener := range listeners {
+		r.WithListener(listener)
+	}
+	return r
 }
 
 // Updates is an alias for WithReducer() to describe state changes
