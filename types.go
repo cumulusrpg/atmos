@@ -113,3 +113,22 @@ func (r DefaultRandomContext) Intn(n int) int {
 func (r DefaultRandomContext) Float64() float64 {
 	return rand.Float64()
 }
+
+// SeededRandomContext provides deterministic randomness with a seed
+type SeededRandomContext struct {
+	rng *rand.Rand
+}
+
+func NewSeededRandomContext(seed int64) *SeededRandomContext {
+	return &SeededRandomContext{
+		rng: rand.New(rand.NewSource(seed)),
+	}
+}
+
+func (r *SeededRandomContext) Intn(n int) int {
+	return r.rng.Intn(n)
+}
+
+func (r *SeededRandomContext) Float64() float64 {
+	return r.rng.Float64()
+}

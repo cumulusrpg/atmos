@@ -31,6 +31,7 @@ type Engine struct {
 	orderedReducers map[string][]OrderedReducer  // event type -> ordered reducers
 	eventFactories map[string]func() Event       // event type -> factory function
 	randomSource   RandomContext                 // injected randomness
+	services       map[string]interface{}        // service name -> service instance (service locator)
 }
 
 // EngineOption configures engine construction
@@ -40,6 +41,13 @@ type EngineOption func(*Engine)
 func WithRandomSource(randomSource RandomContext) EngineOption {
 	return func(e *Engine) {
 		e.randomSource = randomSource
+	}
+}
+
+// WithEvents initializes the engine with an existing event log
+func WithEvents(events []Event) EngineOption {
+	return func(e *Engine) {
+		e.SetEvents(events)
 	}
 }
 
@@ -54,6 +62,7 @@ func NewEngine(opts ...EngineOption) *Engine {
 		orderedReducers: make(map[string][]OrderedReducer),
 		eventFactories:  make(map[string]func() Event),
 		randomSource:    DefaultRandomContext{}, // default
+		services:        make(map[string]interface{}),
 	}
 
 	// Apply options
@@ -106,6 +115,16 @@ func (e *Engine) RegisterOrderedReducer(eventType, stateName string, reducer Sta
 	sort.Slice(e.orderedReducers[eventType], func(i, j int) bool {
 		return e.orderedReducers[eventType][i].Priority < e.orderedReducers[eventType][j].Priority
 	})
+}
+
+// RegisterService registers a service (reference data/utilities) in the service locator
+func (e *Engine) RegisterService(name string, service interface{}) {
+	e.services[name] = service
+}
+
+// GetService retrieves a registered service by name
+func (e *Engine) GetService(name string) interface{} {
+	return e.services[name]
 }
 
 // Project runs a named projection on the current event log
