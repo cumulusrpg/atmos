@@ -93,6 +93,20 @@ func (r *EventRegistration) Updates(stateName string, reducer StateReducer) *Eve
 	return r.WithReducer(stateName, reducer)
 }
 
+// Except creates an exception to skip a validator under certain conditions
+// This explicitly documents when and why validation rules are bypassed
+// Usage: When("card_played").Requires(Valid(&RequireCardInHand{})).
+//           Except(Valid(&RequireCardInHand{}), condition, "reason")
+func (r *EventRegistration) Except(validator EventValidator, condition func(*Engine, Event) bool, reason string) *EventRegistration {
+	exception := ValidatorException{
+		Validator: validator,
+		Condition: condition,
+		Reason:    reason,
+	}
+	r.engine.RegisterException(r.eventType, exception)
+	return r
+}
+
 // Helper functions for wrapping typed validators and listeners
 
 // Valid wraps a typed validator for use with Requires()

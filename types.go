@@ -34,6 +34,14 @@ type EventListener interface {
 	Handle(engine *Engine, event Event)
 }
 
+// ValidatorException defines when a validator should be skipped
+// This allows explicitly documenting exceptions to validation rules
+type ValidatorException struct {
+	Validator EventValidator      // The validator to skip
+	Condition func(*Engine, Event) bool // When to skip it (returns true to skip)
+	Reason    string                    // Documentation of why this exception exists
+}
+
 // TypedEventValidator validates a specific event type with type safety
 type TypedEventValidator[T Event] interface {
 	ValidateTyped(engine *Engine, event T) bool

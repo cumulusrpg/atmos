@@ -25,6 +25,7 @@ type StateRegistry struct {
 type Engine struct {
 	events         []Event
 	validators     map[string][]EventValidator   // event type -> validators
+	exceptions     map[string][]ValidatorException // event type -> validator exceptions
 	listeners      map[string][]EventListener    // event type -> listeners
 	projections    map[string]EventProjection    // projection name -> projection
 	states         map[string]StateRegistry      // state name -> state registry
@@ -56,6 +57,7 @@ func NewEngine(opts ...EngineOption) *Engine {
 	engine := &Engine{
 		events:          make([]Event, 0),
 		validators:      make(map[string][]EventValidator),
+		exceptions:      make(map[string][]ValidatorException),
 		listeners:       make(map[string][]EventListener),
 		projections:     make(map[string]EventProjection),
 		states:          make(map[string]StateRegistry),
@@ -76,6 +78,11 @@ func NewEngine(opts ...EngineOption) *Engine {
 // RegisterValidator registers a validator for a specific event type
 func (e *Engine) RegisterValidator(eventType string, validator EventValidator) {
 	e.validators[eventType] = append(e.validators[eventType], validator)
+}
+
+// RegisterException registers an exception to skip a validator under certain conditions
+func (e *Engine) RegisterException(eventType string, exception ValidatorException) {
+	e.exceptions[eventType] = append(e.exceptions[eventType], exception)
 }
 
 // RegisterListener registers a listener for a specific event type
@@ -177,8 +184,26 @@ func (e *Engine) Emit(event Event) bool {
 	// Get validators for this event type
 	validators, exists := e.validators[event.Type()]
 	if exists {
-		// All validators must approve
+		// Get exceptions for this event type
+		exceptions := e.exceptions[event.Type()]
+
+		// All validators must approve (unless exception applies)
 		for _, validator := range validators {
+			// Check if any exception applies to skip this validator
+			shouldSkip := false
+			for _, exception := range exceptions {
+				if exception.Validator == validator && exception.Condition(e, event) {
+					shouldSkip = true
+					break
+				}
+			}
+
+			// Skip validation if exception applies
+			if shouldSkip {
+				continue
+			}
+
+			// Run validator
 			if !validator.Validate(e, event) {
 				return false // validation failed
 			}
