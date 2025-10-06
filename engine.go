@@ -26,6 +26,7 @@ type Engine struct {
 	events         []Event
 	validators     map[string][]EventValidator   // event type -> validators
 	exceptions     map[string][]ValidatorException // event type -> validator exceptions
+	beforeHooks    map[string][]EventListener    // event type -> pre-commit hooks
 	listeners      map[string][]EventListener    // event type -> listeners
 	projections    map[string]EventProjection    // projection name -> projection
 	states         map[string]StateRegistry      // state name -> state registry
@@ -58,6 +59,7 @@ func NewEngine(opts ...EngineOption) *Engine {
 		events:          make([]Event, 0),
 		validators:      make(map[string][]EventValidator),
 		exceptions:      make(map[string][]ValidatorException),
+		beforeHooks:     make(map[string][]EventListener),
 		listeners:       make(map[string][]EventListener),
 		projections:     make(map[string]EventProjection),
 		states:          make(map[string]StateRegistry),
@@ -83,6 +85,12 @@ func (e *Engine) RegisterValidator(eventType string, validator EventValidator) {
 // RegisterException registers an exception to skip a validator under certain conditions
 func (e *Engine) RegisterException(eventType string, exception ValidatorException) {
 	e.exceptions[eventType] = append(e.exceptions[eventType], exception)
+}
+
+// RegisterBeforeHook registers a pre-commit hook for a specific event type
+// Before hooks run after validation but before the event is committed to the event log
+func (e *Engine) RegisterBeforeHook(eventType string, hook EventListener) {
+	e.beforeHooks[eventType] = append(e.beforeHooks[eventType], hook)
 }
 
 // RegisterListener registers a listener for a specific event type
@@ -209,6 +217,16 @@ func (e *Engine) Emit(event Event) bool {
 			}
 		}
 	}
+
+	// Call before hooks AFTER validation but BEFORE commitment
+	// This allows side effects (like fate dice) to run as part of the event's transaction
+	beforeHooks, hasBeforeHooks := e.beforeHooks[event.Type()]
+	if hasBeforeHooks {
+		for _, hook := range beforeHooks {
+			hook.Handle(e, event)
+		}
+	}
+
 	// No validators or all validators passed - commit the event
 	e.events = append(e.events, event)
 

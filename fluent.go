@@ -77,6 +77,17 @@ func (r *EventRegistration) Requires(validators ...EventValidator) *EventRegistr
 	return r
 }
 
+// Before registers pre-commit hooks that run after validation but before event commitment
+// This is useful for side effects that must happen as part of the event's transaction
+// Accepts multiple hooks for convenience
+// Usage: When("turn_ended").Before(Do(&FateRollsAfterAction{})).Then(...)
+func (r *EventRegistration) Before(hooks ...EventListener) *EventRegistration {
+	for _, hook := range hooks {
+		r.engine.RegisterBeforeHook(r.eventType, hook)
+	}
+	return r
+}
+
 // Then is an alias for WithListener() to read like a consequence
 // Accepts multiple listeners for convenience
 // Usage: When("player_registered").Then(Do(&MyListener{}), Do(&AnotherListener{}))
