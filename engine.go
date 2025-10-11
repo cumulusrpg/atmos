@@ -108,11 +108,12 @@ func (e *Engine) RegisterProjection(name string, projection EventProjection) {
 	e.projections[name] = projection
 }
 
-// RegisterState registers a state with reducers by name
-func (e *Engine) RegisterState(name string, initialState interface{}, reducers map[string]StateReducer) {
+// RegisterState registers a state by name with its initial value
+// Reducers should be attached via the fluent API using Updates()
+func (e *Engine) RegisterState(name string, initialState interface{}) {
 	e.states[name] = StateRegistry{
 		InitialState: initialState,
-		Reducers:     reducers,
+		Reducers:     make(map[string]StateReducer),
 	}
 }
 
