@@ -1,9 +1,9 @@
 # Atmos
 
 ```
-    ╔═╗╔╦╗╔╦╗╔═╗╔═╗
-    ╠═╣ ║ ║║║║ ║╚═╗
-    ╩ ╩ ╩ ╩ ╩╚═╝╚═╝
+╔═╗╔╦╗╔╦╗╔═╗╔═╗
+╠═╣ ║ ║║║║ ║╚═╗
+╩ ╩ ╩ ╩ ╩╚═╝╚═╝
 ```
 
 **Event-driven architecture for Go that makes complex business logic simple, testable, and auditable.**
