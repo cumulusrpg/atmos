@@ -23,17 +23,17 @@ type StateRegistry struct {
 
 // Engine coordinates event emission, validation, and commitment
 type Engine struct {
-	repository     EventRepository                   // event storage abstraction
-	validators     map[string][]EventValidator       // event type -> validators
-	exceptions     map[string][]ValidatorException   // event type -> validator exceptions
-	beforeHooks    map[string][]EventListener        // event type -> pre-commit hooks
-	listeners      map[string][]EventListener        // event type -> listeners
-	projections    map[string]EventProjection        // projection name -> projection
-	states         map[string]StateRegistry          // state name -> state registry
-	orderedReducers map[string][]OrderedReducer      // event type -> ordered reducers
-	eventFactories map[string]func() Event           // event type -> factory function
-	randomSource   RandomContext                     // injected randomness
-	services       map[string]interface{}            // service name -> service instance (service locator)
+	repository      EventRepository                 // event storage abstraction
+	validators      map[string][]EventValidator     // event type -> validators
+	exceptions      map[string][]ValidatorException // event type -> validator exceptions
+	beforeHooks     map[string][]EventListener      // event type -> pre-commit hooks
+	listeners       map[string][]EventListener      // event type -> listeners
+	projections     map[string]EventProjection      // projection name -> projection
+	states          map[string]StateRegistry        // state name -> state registry
+	orderedReducers map[string][]OrderedReducer     // event type -> ordered reducers
+	eventFactories  map[string]func() Event         // event type -> factory function
+	randomSource    RandomContext                   // injected randomness
+	services        map[string]interface{}          // service name -> service instance (service locator)
 }
 
 // EngineOption configures engine construction
@@ -194,7 +194,6 @@ func (e *Engine) GetState(name string) interface{} {
 	return state
 }
 
-
 // Emit attempts to emit an event through validation and commitment
 func (e *Engine) Emit(event Event) bool {
 	// Get validators for this event type
@@ -272,8 +271,11 @@ func (e *Engine) RollDie() int {
 }
 
 // SetEvents sets the events directly (for rebuilding from event log)
+// Panics if the repository fails to set events
 func (e *Engine) SetEvents(events []Event) {
-	e.repository.SetAll(events)
+	if err := e.repository.SetAll(events); err != nil {
+		panic("failed to set events in repository: " + err.Error())
+	}
 }
 
 // EventWrapper wraps events with their type for JSON serialization
@@ -301,7 +303,7 @@ func (e *Engine) UnmarshalEvents(jsonData []byte) ([]Event, error) {
 	if err := json.Unmarshal(jsonData, &wrappers); err != nil {
 		return nil, err
 	}
-	
+
 	var events []Event
 	for _, wrapper := range wrappers {
 		// Get factory for this event type
@@ -309,21 +311,21 @@ func (e *Engine) UnmarshalEvents(jsonData []byte) ([]Event, error) {
 		if !exists {
 			continue // Skip unknown event types
 		}
-		
+
 		// Create new event instance and unmarshal into it
 		event := factory()
 		eventJSON, err := json.Marshal(wrapper.Data)
 		if err != nil {
 			continue // Skip events that can't be re-marshaled
 		}
-		
+
 		if err := json.Unmarshal(eventJSON, event); err != nil {
 			continue // Skip events that can't be unmarshaled
 		}
-		
+
 		// If event is a pointer, dereference it before adding
 		events = append(events, event)
 	}
-	
+
 	return events, nil
 }

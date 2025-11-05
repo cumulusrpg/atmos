@@ -37,7 +37,7 @@ type EventListener interface {
 // ValidatorException defines when a validator should be skipped
 // This allows explicitly documenting exceptions to validation rules
 type ValidatorException struct {
-	Validator EventValidator      // The validator to skip
+	Validator EventValidator            // The validator to skip
 	Condition func(*Engine, Event) bool // When to skip it (returns true to skip)
 	Reason    string                    // Documentation of why this exception exists
 }
