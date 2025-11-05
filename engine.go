@@ -23,17 +23,17 @@ type StateRegistry struct {
 
 // Engine coordinates event emission, validation, and commitment
 type Engine struct {
-	events         []Event
-	validators     map[string][]EventValidator   // event type -> validators
-	exceptions     map[string][]ValidatorException // event type -> validator exceptions
-	beforeHooks    map[string][]EventListener    // event type -> pre-commit hooks
-	listeners      map[string][]EventListener    // event type -> listeners
-	projections    map[string]EventProjection    // projection name -> projection
-	states         map[string]StateRegistry      // state name -> state registry
-	orderedReducers map[string][]OrderedReducer  // event type -> ordered reducers
-	eventFactories map[string]func() Event       // event type -> factory function
-	randomSource   RandomContext                 // injected randomness
-	services       map[string]interface{}        // service name -> service instance (service locator)
+	repository     EventRepository                   // event storage abstraction
+	validators     map[string][]EventValidator       // event type -> validators
+	exceptions     map[string][]ValidatorException   // event type -> validator exceptions
+	beforeHooks    map[string][]EventListener        // event type -> pre-commit hooks
+	listeners      map[string][]EventListener        // event type -> listeners
+	projections    map[string]EventProjection        // projection name -> projection
+	states         map[string]StateRegistry          // state name -> state registry
+	orderedReducers map[string][]OrderedReducer      // event type -> ordered reducers
+	eventFactories map[string]func() Event           // event type -> factory function
+	randomSource   RandomContext                     // injected randomness
+	services       map[string]interface{}            // service name -> service instance (service locator)
 }
 
 // EngineOption configures engine construction
@@ -43,6 +43,13 @@ type EngineOption func(*Engine)
 func WithRandomSource(randomSource RandomContext) EngineOption {
 	return func(e *Engine) {
 		e.randomSource = randomSource
+	}
+}
+
+// WithRepository sets a custom event repository
+func WithRepository(repository EventRepository) EngineOption {
+	return func(e *Engine) {
+		e.repository = repository
 	}
 }
 
@@ -56,7 +63,7 @@ func WithEvents(events []Event) EngineOption {
 // NewEngine creates a new engine with optional configuration
 func NewEngine(opts ...EngineOption) *Engine {
 	engine := &Engine{
-		events:          make([]Event, 0),
+		repository:      NewInMemoryRepository(), // default repository
 		validators:      make(map[string][]EventValidator),
 		exceptions:      make(map[string][]ValidatorException),
 		beforeHooks:     make(map[string][]EventListener),
@@ -151,7 +158,7 @@ func (e *Engine) Project(name string) interface{} {
 	}
 
 	state := projection.InitialState()
-	for _, event := range e.events {
+	for _, event := range e.repository.GetAll() {
 		state = projection.Reduce(state, event)
 	}
 
@@ -166,7 +173,7 @@ func (e *Engine) GetState(name string) interface{} {
 	}
 
 	state := registry.InitialState
-	for _, event := range e.events {
+	for _, event := range e.repository.GetAll() {
 		// Check if there are ordered reducers for this event type
 		if orderedReducers, hasOrdered := e.orderedReducers[event.Type()]; hasOrdered {
 			// Apply ordered reducers for this state name only
@@ -228,8 +235,10 @@ func (e *Engine) Emit(event Event) bool {
 		}
 	}
 
-	// No validators or all validators passed - commit the event
-	e.events = append(e.events, event)
+	// No validators or all validators passed - commit the event to repository
+	if err := e.repository.Add(event); err != nil {
+		return false // persistence failure
+	}
 
 	// Call listeners after commitment
 	listeners, hasListeners := e.listeners[event.Type()]
@@ -244,7 +253,7 @@ func (e *Engine) Emit(event Event) bool {
 
 // GetEvents returns all events in the system
 func (e *Engine) GetEvents() []Event {
-	return append([]Event{}, e.events...)
+	return e.repository.GetAll()
 }
 
 // Intn provides access to randomness for validators/listeners
@@ -264,7 +273,7 @@ func (e *Engine) RollDie() int {
 
 // SetEvents sets the events directly (for rebuilding from event log)
 func (e *Engine) SetEvents(events []Event) {
-	e.events = append([]Event{}, events...)
+	e.repository.SetAll(events)
 }
 
 // EventWrapper wraps events with their type for JSON serialization

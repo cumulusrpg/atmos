@@ -140,3 +140,15 @@ func (r *SeededRandomContext) Intn(n int) int {
 func (r *SeededRandomContext) Float64() float64 {
 	return r.rng.Float64()
 }
+
+// EventRepository handles event storage and persistence
+type EventRepository interface {
+	// Add commits a new event to storage
+	Add(event Event) error
+
+	// GetAll returns all events for replay
+	GetAll() []Event
+
+	// SetAll atomically replaces all events (for rebuilding from event log)
+	SetAll(events []Event) error
+}
