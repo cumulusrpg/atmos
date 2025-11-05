@@ -378,9 +378,48 @@ orderNumber := fmt.Sprintf("ORD-%d", engine.Intn(1000000))
 
 With a fixed seed, tests produce identical results every time.
 
+### Custom Event Repositories
+
+By default, Atmos stores events in memory. For production use, implement a custom repository to persist events automatically:
+
+```go
+// Implement the EventRepository interface
+type FileRepository struct {
+    filepath string
+}
+
+func (r *FileRepository) Add(event atmos.Event) error {
+    // Append event to file atomically
+    return appendEventToFile(r.filepath, event)
+}
+
+func (r *FileRepository) GetAll() []atmos.Event {
+    // Load all events from file
+    return loadEventsFromFile(r.filepath)
+}
+
+func (r *FileRepository) SetAll(events []atmos.Event) error {
+    // Replace file contents atomically
+    return writeEventsToFile(r.filepath, events)
+}
+
+// Use custom repository
+repo := &FileRepository{filepath: "events.jsonl"}
+engine := atmos.NewEngine(atmos.WithRepository(repo))
+
+// Events are now automatically persisted on every Emit()
+engine.Emit(OrderPlacedEvent{...})  // Saved to disk automatically!
+```
+
+Benefits:
+- **Automatic persistence** - No manual save/load required
+- **Pluggable storage** - File, database, cloud storage, etc.
+- **Failure safety** - If `Add()` fails, the event is rejected
+- **Simple interface** - Just three methods to implement
+
 ### Event Replay and Persistence
 
-Serialize events for storage:
+For manual persistence workflows, serialize events to JSON:
 
 ```go
 // Get all events
@@ -456,7 +495,7 @@ Validators Check ──→ [REJECT if any fail]
     ↓
 Before Hooks Run (transactional)
     ↓
-Event Committed to Log ← [Point of no return]
+Event Committed to Repository ← [Point of no return]
     ↓
 State Reducers Apply (pure functions)
     ↓
