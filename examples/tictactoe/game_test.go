@@ -69,6 +69,10 @@ func TestTicTacToeGame(t *testing.T) {
 	assert.Equal(t, "X", state.Winner, "X should win with diagonal")
 	assert.True(t, state.IsGameOver(), "Game should be over")
 
+	// Verify board display
+	expectedBoard := "O O X\n- X -\nX - -"
+	assert.Equal(t, expectedBoard, game.GetBoard(), "Board should display winning state")
+
 	// Test that we can't move after game is over
 	err = game.MakeMove("O", 3)
 	assert.Error(t, err, "Should not be able to move after game is over")
@@ -99,6 +103,10 @@ func TestTicTacToeDraw(t *testing.T) {
 	state := game.GetGameState()
 	assert.Equal(t, "draw", state.Winner, "Game should be a draw")
 	assert.True(t, state.IsGameOver(), "Game should be over")
+
+	// Verify final board display
+	expectedBoard := "X O X\nX O O\nO X X"
+	assert.Equal(t, expectedBoard, game.GetBoard(), "Board should display draw state")
 }
 
 func TestTicTacToeWinningConditions(t *testing.T) {
