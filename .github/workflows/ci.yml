@@ -35,7 +35,16 @@ jobs:
       run: go mod download
 
     - name: Run tests
-      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic -coverpkg=./... ./...
+      run: |
+        # Run tests for each package and collect coverage
+        echo "mode: atomic" > coverage.txt
+        for pkg in $(go list ./...); do
+          go test -race -covermode=atomic -coverprofile=profile.out -coverpkg=./... $pkg
+          if [ -f profile.out ]; then
+            tail -n +2 profile.out >> coverage.txt
+            rm profile.out
+          fi
+        done
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
