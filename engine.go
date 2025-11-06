@@ -35,13 +35,6 @@ func WithRepository(repository EventRepository) EngineOption {
 	}
 }
 
-// WithEvents initializes the engine with an existing event log
-func WithEvents(events []Event) EngineOption {
-	return func(e *Engine) {
-		e.SetEvents(events)
-	}
-}
-
 // NewEngine creates a new engine with optional configuration
 func NewEngine(opts ...EngineOption) *Engine {
 	engine := &Engine{
