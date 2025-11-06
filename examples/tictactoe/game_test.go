@@ -52,15 +52,15 @@ func TestTicTacToeGame(t *testing.T) {
 	// O - -
 	// - X -
 	// - - -
-	game.MakeMove("X", 2) // X takes top-right
+	_ = game.MakeMove("X", 2) // X takes top-right
 	// O - X
 	// - X -
 	// - - -
-	game.MakeMove("O", 1) // O takes top-middle
+	_ = game.MakeMove("O", 1) // O takes top-middle
 	// O O X
 	// - X -
 	// - - -
-	game.MakeMove("X", 6) // X takes bottom-left - wins with diagonal!
+	_ = game.MakeMove("X", 6) // X takes bottom-left - wins with diagonal!
 	// O O X
 	// - X -
 	// X - -
@@ -76,7 +76,7 @@ func TestTicTacToeGame(t *testing.T) {
 
 func TestTicTacToeDraw(t *testing.T) {
 	game := NewGame()
-	game.StartGame("Alice", "Bob")
+	_ = game.StartGame("Alice", "Bob")
 
 	// Play out a draw
 	// X O X
@@ -105,16 +105,16 @@ func TestTicTacToeWinningConditions(t *testing.T) {
 	// Test horizontal win
 	t.Run("horizontal win", func(t *testing.T) {
 		game := NewGame()
-		game.StartGame("Alice", "Bob")
+		_ = game.StartGame("Alice", "Bob")
 
 		// X X X
 		// O O -
 		// - - -
-		game.MakeMove("X", 0)
-		game.MakeMove("O", 3)
-		game.MakeMove("X", 1)
-		game.MakeMove("O", 4)
-		game.MakeMove("X", 2) // X wins
+		_ = game.MakeMove("X", 0)
+		_ = game.MakeMove("O", 3)
+		_ = game.MakeMove("X", 1)
+		_ = game.MakeMove("O", 4)
+		_ = game.MakeMove("X", 2) // X wins
 
 		state := game.GetGameState()
 		assert.Equal(t, "X", state.Winner, "X should win horizontally")
@@ -123,16 +123,16 @@ func TestTicTacToeWinningConditions(t *testing.T) {
 	// Test vertical win
 	t.Run("vertical win", func(t *testing.T) {
 		game := NewGame()
-		game.StartGame("Alice", "Bob")
+		_ = game.StartGame("Alice", "Bob")
 
 		// X O -
 		// X O -
 		// X - -
-		game.MakeMove("X", 0)
-		game.MakeMove("O", 1)
-		game.MakeMove("X", 3)
-		game.MakeMove("O", 4)
-		game.MakeMove("X", 6) // X wins
+		_ = game.MakeMove("X", 0)
+		_ = game.MakeMove("O", 1)
+		_ = game.MakeMove("X", 3)
+		_ = game.MakeMove("O", 4)
+		_ = game.MakeMove("X", 6) // X wins
 
 		state := game.GetGameState()
 		assert.Equal(t, "X", state.Winner, "X should win vertically")
@@ -141,17 +141,17 @@ func TestTicTacToeWinningConditions(t *testing.T) {
 	// Test diagonal win
 	t.Run("diagonal win", func(t *testing.T) {
 		game := NewGame()
-		game.StartGame("Alice", "Bob")
+		_ = game.StartGame("Alice", "Bob")
 
 		// O - -
 		// - O -
 		// X X O
-		game.MakeMove("X", 6)
-		game.MakeMove("O", 0)
-		game.MakeMove("X", 7)
-		game.MakeMove("O", 4)
-		game.MakeMove("X", 1)
-		game.MakeMove("O", 8) // O wins
+		_ = game.MakeMove("X", 6)
+		_ = game.MakeMove("O", 0)
+		_ = game.MakeMove("X", 7)
+		_ = game.MakeMove("O", 4)
+		_ = game.MakeMove("X", 1)
+		_ = game.MakeMove("O", 8) // O wins
 
 		state := game.GetGameState()
 		assert.Equal(t, "O", state.Winner, "O should win diagonally")
@@ -160,12 +160,12 @@ func TestTicTacToeWinningConditions(t *testing.T) {
 
 func TestEventLog(t *testing.T) {
 	game := NewGame()
-	game.StartGame("Alice", "Bob")
-	game.MakeMove("X", 0)
-	game.MakeMove("O", 4)
-	game.MakeMove("X", 1)
-	game.MakeMove("O", 3)
-	game.MakeMove("X", 2) // X wins
+	_ = game.StartGame("Alice", "Bob")
+	_ = game.MakeMove("X", 0)
+	_ = game.MakeMove("O", 4)
+	_ = game.MakeMove("X", 1)
+	_ = game.MakeMove("O", 3)
+	_ = game.MakeMove("X", 2) // X wins
 
 	// Get all events
 	events := game.engine.GetEvents()
