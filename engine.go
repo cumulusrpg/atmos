@@ -28,7 +28,6 @@ type Engine struct {
 	exceptions      map[string][]ValidatorException // event type -> validator exceptions
 	beforeHooks     map[string][]EventListener      // event type -> pre-commit hooks
 	listeners       map[string][]EventListener      // event type -> listeners
-	projections     map[string]EventProjection      // projection name -> projection
 	states          map[string]StateRegistry        // state name -> state registry
 	orderedReducers map[string][]OrderedReducer     // event type -> ordered reducers
 	eventFactories  map[string]func() Event         // event type -> factory function
@@ -68,7 +67,6 @@ func NewEngine(opts ...EngineOption) *Engine {
 		exceptions:      make(map[string][]ValidatorException),
 		beforeHooks:     make(map[string][]EventListener),
 		listeners:       make(map[string][]EventListener),
-		projections:     make(map[string]EventProjection),
 		states:          make(map[string]StateRegistry),
 		orderedReducers: make(map[string][]OrderedReducer),
 		eventFactories:  make(map[string]func() Event),
@@ -110,11 +108,6 @@ func (e *Engine) RegisterEventType(eventType string, factory func() Event) {
 	e.eventFactories[eventType] = factory
 }
 
-// RegisterProjection registers a projection by name
-func (e *Engine) RegisterProjection(name string, projection EventProjection) {
-	e.projections[name] = projection
-}
-
 // RegisterState registers a state by name with its initial value
 // Reducers should be attached via the fluent API using Updates()
 func (e *Engine) RegisterState(name string, initialState interface{}) {
@@ -148,21 +141,6 @@ func (e *Engine) RegisterService(name string, service interface{}) {
 // GetService retrieves a registered service by name
 func (e *Engine) GetService(name string) interface{} {
 	return e.services[name]
-}
-
-// Project runs a named projection on the current event log
-func (e *Engine) Project(name string) interface{} {
-	projection, exists := e.projections[name]
-	if !exists {
-		return nil
-	}
-
-	state := projection.InitialState()
-	for _, event := range e.repository.GetAll() {
-		state = projection.Reduce(state, event)
-	}
-
-	return state
 }
 
 // GetState runs reducers on the current event log for a state

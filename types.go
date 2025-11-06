@@ -82,12 +82,6 @@ func NewTypedListener[T Event](listener TypedEventListener[T]) EventListener {
 	return ListenerWrapper[T]{listener: listener}
 }
 
-// EventProjection transforms events into state through reduction
-type EventProjection interface {
-	InitialState() interface{}
-	Reduce(state interface{}, event Event) interface{}
-}
-
 // Context interfaces for explicit dependency injection
 
 // EventLogContext provides access to the event log for validation/projection
@@ -104,11 +98,6 @@ type EmitterContext interface {
 type RandomContext interface {
 	Intn(n int) int
 	Float64() float64
-}
-
-// ProjectorContext provides access to registered projections
-type ProjectorContext interface {
-	Project(name string) interface{}
 }
 
 // DefaultRandomContext provides real randomness using math/rand
