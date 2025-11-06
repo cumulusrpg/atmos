@@ -2,18 +2,10 @@ package atmos
 
 import (
 	"encoding/json"
-	"sort"
 )
 
 // StateReducer represents a function that reduces an event into a state
 type StateReducer func(engine *Engine, state interface{}, event Event) interface{}
-
-// OrderedReducer holds a reducer with its execution priority
-type OrderedReducer struct {
-	StateName string
-	Reducer   StateReducer
-	Priority  int // lower numbers execute first
-}
 
 // StateRegistry holds state and its reducers
 type StateRegistry struct {
@@ -23,15 +15,14 @@ type StateRegistry struct {
 
 // Engine coordinates event emission, validation, and commitment
 type Engine struct {
-	repository      EventRepository                 // event storage abstraction
-	validators      map[string][]EventValidator     // event type -> validators
-	exceptions      map[string][]ValidatorException // event type -> validator exceptions
-	beforeHooks     map[string][]EventListener      // event type -> pre-commit hooks
-	listeners       map[string][]EventListener      // event type -> listeners
-	states          map[string]StateRegistry        // state name -> state registry
-	orderedReducers map[string][]OrderedReducer     // event type -> ordered reducers
-	eventFactories  map[string]func() Event         // event type -> factory function
-	services        map[string]interface{}          // service name -> service instance (service locator)
+	repository     EventRepository                 // event storage abstraction
+	validators     map[string][]EventValidator     // event type -> validators
+	exceptions     map[string][]ValidatorException // event type -> validator exceptions
+	beforeHooks    map[string][]EventListener      // event type -> pre-commit hooks
+	listeners      map[string][]EventListener      // event type -> listeners
+	states         map[string]StateRegistry        // state name -> state registry
+	eventFactories map[string]func() Event         // event type -> factory function
+	services       map[string]interface{}          // service name -> service instance (service locator)
 }
 
 // EngineOption configures engine construction
@@ -54,15 +45,14 @@ func WithEvents(events []Event) EngineOption {
 // NewEngine creates a new engine with optional configuration
 func NewEngine(opts ...EngineOption) *Engine {
 	engine := &Engine{
-		repository:      NewInMemoryRepository(), // default repository
-		validators:      make(map[string][]EventValidator),
-		exceptions:      make(map[string][]ValidatorException),
-		beforeHooks:     make(map[string][]EventListener),
-		listeners:       make(map[string][]EventListener),
-		states:          make(map[string]StateRegistry),
-		orderedReducers: make(map[string][]OrderedReducer),
-		eventFactories:  make(map[string]func() Event),
-		services:        make(map[string]interface{}),
+		repository:     NewInMemoryRepository(), // default repository
+		validators:     make(map[string][]EventValidator),
+		exceptions:     make(map[string][]ValidatorException),
+		beforeHooks:    make(map[string][]EventListener),
+		listeners:      make(map[string][]EventListener),
+		states:         make(map[string]StateRegistry),
+		eventFactories: make(map[string]func() Event),
+		services:       make(map[string]interface{}),
 	}
 
 	// Apply options
@@ -108,22 +98,6 @@ func (e *Engine) RegisterState(name string, initialState interface{}) {
 	}
 }
 
-// RegisterOrderedReducer registers a reducer with priority for cross-state coordination
-func (e *Engine) RegisterOrderedReducer(eventType, stateName string, reducer StateReducer, priority int) {
-	orderedReducer := OrderedReducer{
-		StateName: stateName,
-		Reducer:   reducer,
-		Priority:  priority,
-	}
-
-	e.orderedReducers[eventType] = append(e.orderedReducers[eventType], orderedReducer)
-
-	// Sort by priority after adding
-	sort.Slice(e.orderedReducers[eventType], func(i, j int) bool {
-		return e.orderedReducers[eventType][i].Priority < e.orderedReducers[eventType][j].Priority
-	})
-}
-
 // RegisterService registers a service (reference data/utilities) in the service locator
 func (e *Engine) RegisterService(name string, service interface{}) {
 	e.services[name] = service
@@ -143,20 +117,9 @@ func (e *Engine) GetState(name string) interface{} {
 
 	state := registry.InitialState
 	for _, event := range e.repository.GetAll() {
-		// Check if there are ordered reducers for this event type
-		if orderedReducers, hasOrdered := e.orderedReducers[event.Type()]; hasOrdered {
-			// Apply ordered reducers for this state name only
-			for _, orderedReducer := range orderedReducers {
-				if orderedReducer.StateName == name {
-					state = orderedReducer.Reducer(e, state, event)
-				}
-			}
-		} else {
-			// Use regular reducers
-			reducer, hasReducer := registry.Reducers[event.Type()]
-			if hasReducer {
-				state = reducer(e, state, event)
-			}
+		reducer, hasReducer := registry.Reducers[event.Type()]
+		if hasReducer {
+			state = reducer(e, state, event)
 		}
 	}
 
