@@ -1,7 +1,6 @@
 package atmos
 
 import (
-	"math/rand"
 	"time"
 )
 
@@ -92,42 +91,6 @@ type EventLogContext interface {
 // EmitterContext provides controlled event emission capability
 type EmitterContext interface {
 	Emit(event Event) bool
-}
-
-// RandomContext provides controlled randomness injection
-type RandomContext interface {
-	Intn(n int) int
-	Float64() float64
-}
-
-// DefaultRandomContext provides real randomness using math/rand
-type DefaultRandomContext struct{}
-
-func (r DefaultRandomContext) Intn(n int) int {
-	return rand.Intn(n)
-}
-
-func (r DefaultRandomContext) Float64() float64 {
-	return rand.Float64()
-}
-
-// SeededRandomContext provides deterministic randomness with a seed
-type SeededRandomContext struct {
-	rng *rand.Rand
-}
-
-func NewSeededRandomContext(seed int64) *SeededRandomContext {
-	return &SeededRandomContext{
-		rng: rand.New(rand.NewSource(seed)),
-	}
-}
-
-func (r *SeededRandomContext) Intn(n int) int {
-	return r.rng.Intn(n)
-}
-
-func (r *SeededRandomContext) Float64() float64 {
-	return r.rng.Float64()
 }
 
 // EventRepository handles event storage and persistence

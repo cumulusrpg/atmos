@@ -31,19 +31,11 @@ type Engine struct {
 	states          map[string]StateRegistry        // state name -> state registry
 	orderedReducers map[string][]OrderedReducer     // event type -> ordered reducers
 	eventFactories  map[string]func() Event         // event type -> factory function
-	randomSource    RandomContext                   // injected randomness
 	services        map[string]interface{}          // service name -> service instance (service locator)
 }
 
 // EngineOption configures engine construction
 type EngineOption func(*Engine)
-
-// WithRandomSource sets a custom random source
-func WithRandomSource(randomSource RandomContext) EngineOption {
-	return func(e *Engine) {
-		e.randomSource = randomSource
-	}
-}
 
 // WithRepository sets a custom event repository
 func WithRepository(repository EventRepository) EngineOption {
@@ -70,7 +62,6 @@ func NewEngine(opts ...EngineOption) *Engine {
 		states:          make(map[string]StateRegistry),
 		orderedReducers: make(map[string][]OrderedReducer),
 		eventFactories:  make(map[string]func() Event),
-		randomSource:    DefaultRandomContext{}, // default
 		services:        make(map[string]interface{}),
 	}
 
@@ -231,21 +222,6 @@ func (e *Engine) Emit(event Event) bool {
 // GetEvents returns all events in the system
 func (e *Engine) GetEvents() []Event {
 	return e.repository.GetAll()
-}
-
-// Intn provides access to randomness for validators/listeners
-func (e *Engine) Intn(n int) int {
-	return e.randomSource.Intn(n)
-}
-
-// Float64 provides access to randomness for validators/listeners
-func (e *Engine) Float64() float64 {
-	return e.randomSource.Float64()
-}
-
-// RollDie provides dice rolling (1-6) using the injected randomness
-func (e *Engine) RollDie() int {
-	return e.randomSource.Intn(6) + 1
 }
 
 // SetEvents sets the events directly (for rebuilding from event log)

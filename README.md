@@ -365,25 +365,6 @@ engine.When("order_placed").
 
 The `reason` string documents why the exception exists.
 
-### Deterministic Testing
-
-Inject random sources for reproducible tests:
-
-```go
-// Production: real randomness
-engine := atmos.NewEngine()
-
-// Testing: deterministic behavior
-engine := atmos.NewEngine(
-    atmos.WithRandomSource(atmos.NewSeededRandomContext(42)),
-)
-
-// Use in validators/listeners
-orderNumber := fmt.Sprintf("ORD-%d", engine.Intn(1000000))
-```
-
-With a fixed seed, tests produce identical results every time.
-
 ### Custom Event Repositories
 
 By default, Atmos stores events in memory. For production use, implement a custom repository to persist events automatically:
