@@ -1,8 +1,6 @@
 package tictactoe
 
 import (
-	"time"
-
 	"github.com/cumulusrpg/atmos"
 )
 
@@ -17,7 +15,6 @@ func (l *CheckForWinner) HandleTyped(engine *atmos.Engine, event MoveMadeEvent) 
 		// Emit game ended event
 		engine.Emit(GameEndedEvent{
 			Winner: winner,
-			Time:   time.Now(),
 		})
 	}
 }

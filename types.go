@@ -1,9 +1,5 @@
 package atmos
 
-import (
-	"time"
-)
-
 // Framework types that could eventually move to the atmos package
 
 // Result represents the outcome of a game action
@@ -15,7 +11,6 @@ type Result struct {
 // Event represents something that happened in the game
 type Event interface {
 	Type() string
-	Timestamp() time.Time
 }
 
 // EventEmitter provides minimal interface for emitting events

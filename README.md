@@ -146,11 +146,9 @@ import (
 type ItemAddedEvent struct {
     ItemID   string
     Quantity int
-    Time     time.Time
 }
 
 func (e ItemAddedEvent) Type() string { return "item_added" }
-func (e ItemAddedEvent) Timestamp() time.Time { return e.Time }
 
 // 2. Define state
 type InventoryState struct {
@@ -213,11 +211,9 @@ type OrderPlacedEvent struct {
     CustomerID string
     Items      []OrderItem
     Total      float64
-    Time       time.Time
 }
 
 func (e OrderPlacedEvent) Type() string { return "order_placed" }
-func (e OrderPlacedEvent) Timestamp() time.Time { return e.Time }
 ```
 
 Events are:

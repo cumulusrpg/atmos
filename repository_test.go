@@ -3,21 +3,15 @@ package atmos
 import (
 	"errors"
 	"testing"
-	"time"
 )
 
 // Test event for repository tests
 type TestEvent struct {
 	Name string
-	Time time.Time
 }
 
 func (e TestEvent) Type() string {
 	return "test_event"
-}
-
-func (e TestEvent) Timestamp() time.Time {
-	return e.Time
 }
 
 // CustomRepository that tracks all adds and can fail on demand
@@ -51,7 +45,7 @@ func TestCustomRepositoryInterceptsEvents(t *testing.T) {
 	engine := NewEngine(WithRepository(customRepo))
 
 	// Emit an event
-	event := TestEvent{Name: "test1", Time: time.Now()}
+	event := TestEvent{Name: "test1"}
 	success := engine.Emit(event)
 
 	if !success {
@@ -74,7 +68,7 @@ func TestRepositoryFailureRejectsEvent(t *testing.T) {
 	engine := NewEngine(WithRepository(customRepo))
 
 	// Try to emit an event - should fail due to repository failure
-	event := TestEvent{Name: "test1", Time: time.Now()}
+	event := TestEvent{Name: "test1"}
 	success := engine.Emit(event)
 
 	if success {
@@ -113,9 +107,9 @@ func TestRepositoryUsedForStateReplay(t *testing.T) {
 		})
 
 	// Emit some events
-	engine.Emit(TestEvent{Name: "event1", Time: time.Now()})
-	engine.Emit(TestEvent{Name: "event2", Time: time.Now()})
-	engine.Emit(TestEvent{Name: "event3", Time: time.Now()})
+	engine.Emit(TestEvent{Name: "event1"})
+	engine.Emit(TestEvent{Name: "event2"})
+	engine.Emit(TestEvent{Name: "event3"})
 
 	// Verify state is built from repository
 	state := engine.GetState("counter").(CountState)
@@ -136,8 +130,8 @@ func TestSetEventsWithCustomRepository(t *testing.T) {
 
 	// Create some events
 	events := []Event{
-		TestEvent{Name: "event1", Time: time.Now()},
-		TestEvent{Name: "event2", Time: time.Now()},
+		TestEvent{Name: "event1"},
+		TestEvent{Name: "event2"},
 	}
 
 	// Set events
@@ -160,7 +154,7 @@ func TestSetEventsWithCustomRepository(t *testing.T) {
 func TestInMemoryRepositoryDefault(t *testing.T) {
 	engine := NewEngine()
 
-	event := TestEvent{Name: "test1", Time: time.Now()}
+	event := TestEvent{Name: "test1"}
 	success := engine.Emit(event)
 
 	if !success {

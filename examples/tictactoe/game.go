@@ -2,7 +2,6 @@ package tictactoe
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/cumulusrpg/atmos"
 )
@@ -40,7 +39,6 @@ func (g *Game) StartGame(playerX, playerO string) error {
 	success := g.engine.Emit(GameStartedEvent{
 		PlayerX: playerX,
 		PlayerO: playerO,
-		Time:    time.Now(),
 	})
 
 	if !success {
@@ -55,7 +53,6 @@ func (g *Game) MakeMove(player string, position int) error {
 	success := g.engine.Emit(MoveMadeEvent{
 		Player:   player,
 		Position: position,
-		Time:     time.Now(),
 	})
 
 	if !success {

@@ -2,7 +2,6 @@ package atmos
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -11,20 +10,16 @@ import (
 type PlayerRegisteredEvent struct {
 	PlayerName string
 	PlayerType string
-	timestamp  time.Time
 }
 
-func (e *PlayerRegisteredEvent) Type() string        { return "player_registered" }
-func (e *PlayerRegisteredEvent) Timestamp() time.Time { return e.timestamp }
+func (e *PlayerRegisteredEvent) Type() string { return "player_registered" }
 
 type TokensGrantedEvent struct {
 	PlayerName string
 	Amount     int
-	timestamp  time.Time
 }
 
-func (e *TokensGrantedEvent) Type() string        { return "tokens_granted" }
-func (e *TokensGrantedEvent) Timestamp() time.Time { return e.timestamp }
+func (e *TokensGrantedEvent) Type() string { return "tokens_granted" }
 
 func TestEmitFluentAPI(t *testing.T) {
 	engine := NewEngine()
@@ -41,7 +36,6 @@ func TestEmitFluentAPI(t *testing.T) {
 					{
 						PlayerName: e.PlayerName,
 						Amount:     100,
-						timestamp:  time.Now(),
 					},
 				}
 			}),
@@ -51,7 +45,6 @@ func TestEmitFluentAPI(t *testing.T) {
 	creatorEvent := &PlayerRegisteredEvent{
 		PlayerName: "Alice",
 		PlayerType: "creator",
-		timestamp:  time.Now(),
 	}
 	engine.Emit(creatorEvent)
 
@@ -70,7 +63,6 @@ func TestEmitFluentAPI(t *testing.T) {
 	playerEvent := &PlayerRegisteredEvent{
 		PlayerName: "Bob",
 		PlayerType: "player",
-		timestamp:  time.Now(),
 	}
 	engine.Emit(playerEvent)
 
@@ -90,7 +82,6 @@ func TestEmitWithoutCondition(t *testing.T) {
 					{
 						PlayerName: e.PlayerName,
 						Amount:     50,
-						timestamp:  time.Now(),
 					},
 				}
 			}),
@@ -100,7 +91,6 @@ func TestEmitWithoutCondition(t *testing.T) {
 	engine.Emit(&PlayerRegisteredEvent{
 		PlayerName: "Charlie",
 		PlayerType: "player",
-		timestamp:  time.Now(),
 	})
 
 	events := engine.GetEvents()
@@ -115,11 +105,9 @@ func TestEmitWithoutCondition(t *testing.T) {
 
 type WelcomeEmailEvent struct {
 	PlayerName string
-	timestamp  time.Time
 }
 
-func (e *WelcomeEmailEvent) Type() string        { return "welcome_email" }
-func (e *WelcomeEmailEvent) Timestamp() time.Time { return e.timestamp }
+func (e *WelcomeEmailEvent) Type() string { return "welcome_email" }
 
 func TestEmitMultipleEvents(t *testing.T) {
 	engine := NewEngine()
@@ -132,11 +120,9 @@ func TestEmitMultipleEvents(t *testing.T) {
 					&TokensGrantedEvent{
 						PlayerName: e.PlayerName,
 						Amount:     25,
-						timestamp:  time.Now(),
 					},
 					&WelcomeEmailEvent{
 						PlayerName: e.PlayerName,
-						timestamp:  time.Now(),
 					},
 				}
 			}),
@@ -145,7 +131,6 @@ func TestEmitMultipleEvents(t *testing.T) {
 	engine.Emit(&PlayerRegisteredEvent{
 		PlayerName: "Dave",
 		PlayerType: "player",
-		timestamp:  time.Now(),
 	})
 
 	events := engine.GetEvents()
