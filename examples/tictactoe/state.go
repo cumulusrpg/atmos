@@ -2,21 +2,21 @@ package tictactoe
 
 // GameState represents the current state of a tic-tac-toe game
 type GameState struct {
-	Board        [9]string // Board positions: "X", "O", or "" for empty
+	Board         [9]string // Board positions: "X", "O", or "" for empty
 	CurrentPlayer string    // "X" or "O"
-	Winner       string    // "X", "O", "draw", or "" if game ongoing
-	GameStarted  bool
-	PlayerXName  string
-	PlayerOName  string
+	Winner        string    // "X", "O", "draw", or "" if game ongoing
+	GameStarted   bool
+	PlayerXName   string
+	PlayerOName   string
 }
 
 // NewGameState creates a fresh game state
 func NewGameState() GameState {
 	return GameState{
-		Board:        [9]string{},
+		Board:         [9]string{},
 		CurrentPlayer: "X", // X always starts
-		Winner:       "",
-		GameStarted:  false,
+		Winner:        "",
+		GameStarted:   false,
 	}
 }
 
@@ -39,7 +39,7 @@ func (s GameState) CheckWinner() string {
 	lines := [][3]int{
 		{0, 1, 2}, {3, 4, 5}, {6, 7, 8}, // rows
 		{0, 3, 6}, {1, 4, 7}, {2, 5, 8}, // columns
-		{0, 4, 8}, {2, 4, 6},             // diagonals
+		{0, 4, 8}, {2, 4, 6}, // diagonals
 	}
 
 	for _, line := range lines {
