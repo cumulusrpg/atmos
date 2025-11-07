@@ -1,11 +1,5 @@
 # Atmos
 
-```
-╔═╗╔╦╗╔╦╗╔═╗╔═╗
-╠═╣ ║ ║║║║ ║╚═╗
-╩ ╩ ╩ ╩ ╩╚═╝╚═╝
-```
-
 [![Go Report Card](https://goreportcard.com/badge/github.com/cumulusrpg/atmos)](https://goreportcard.com/report/github.com/cumulusrpg/atmos)
 [![CI](https://github.com/cumulusrpg/atmos/workflows/CI/badge.svg)](https://github.com/cumulusrpg/atmos/actions)
 [![codecov](https://codecov.io/gh/cumulusrpg/atmos/branch/main/graph/badge.svg)](https://codecov.io/gh/cumulusrpg/atmos)
