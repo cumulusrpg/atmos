@@ -21,7 +21,7 @@ type CustomRepository struct {
 	shouldFail bool
 }
 
-func (r *CustomRepository) Add(event Event) error {
+func (r *CustomRepository) Add(engine *Engine, event Event) error {
 	r.addCalls++
 	if r.shouldFail {
 		return errors.New("simulated repository failure")
@@ -30,11 +30,11 @@ func (r *CustomRepository) Add(event Event) error {
 	return nil
 }
 
-func (r *CustomRepository) GetAll() []Event {
+func (r *CustomRepository) GetAll(engine *Engine) []Event {
 	return append([]Event{}, r.events...)
 }
 
-func (r *CustomRepository) SetAll(events []Event) error {
+func (r *CustomRepository) SetAll(engine *Engine, events []Event) error {
 	r.events = append([]Event{}, events...)
 	return nil
 }
@@ -138,7 +138,7 @@ func TestSetEventsWithCustomRepository(t *testing.T) {
 	engine.SetEvents(events)
 
 	// Verify repository has the events
-	repoEvents := customRepo.GetAll()
+	repoEvents := customRepo.GetAll(engine)
 	if len(repoEvents) != 2 {
 		t.Errorf("Expected 2 events in repository, got %d", len(repoEvents))
 	}

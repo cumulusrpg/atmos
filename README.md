@@ -371,19 +371,26 @@ type FileRepository struct {
     filepath string
 }
 
-func (r *FileRepository) Add(event atmos.Event) error {
-    // Append event to file atomically
-    return appendEventToFile(r.filepath, event)
+func (r *FileRepository) Add(engine *atmos.Engine, event atmos.Event) error {
+    // Serialize event using engine's registered event types
+    jsonData, _ := engine.MarshalEvents([]atmos.Event{event})
+    // Append to file atomically
+    return appendToFile(r.filepath, jsonData)
 }
 
-func (r *FileRepository) GetAll() []atmos.Event {
-    // Load all events from file
-    return loadEventsFromFile(r.filepath)
+func (r *FileRepository) GetAll(engine *atmos.Engine) []atmos.Event {
+    // Load JSON from file
+    jsonData := readFile(r.filepath)
+    // Deserialize using engine's registered event types
+    events, _ := engine.UnmarshalEvents(jsonData)
+    return events
 }
 
-func (r *FileRepository) SetAll(events []atmos.Event) error {
+func (r *FileRepository) SetAll(engine *atmos.Engine, events []atmos.Event) error {
+    // Serialize all events
+    jsonData, _ := engine.MarshalEvents(events)
     // Replace file contents atomically
-    return writeEventsToFile(r.filepath, events)
+    return writeFile(r.filepath, jsonData)
 }
 
 // Use custom repository

@@ -91,11 +91,11 @@ type EmitterContext interface {
 // EventRepository handles event storage and persistence
 type EventRepository interface {
 	// Add commits a new event to storage
-	Add(event Event) error
+	Add(engine *Engine, event Event) error
 
 	// GetAll returns all events for replay
-	GetAll() []Event
+	GetAll(engine *Engine) []Event
 
 	// SetAll atomically replaces all events (for rebuilding from event log)
-	SetAll(events []Event) error
+	SetAll(engine *Engine, events []Event) error
 }

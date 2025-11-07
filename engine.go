@@ -109,7 +109,7 @@ func (e *Engine) GetState(name string) interface{} {
 	}
 
 	state := registry.InitialState
-	for _, event := range e.repository.GetAll() {
+	for _, event := range e.repository.GetAll(e) {
 		reducer, hasReducer := registry.Reducers[event.Type()]
 		if hasReducer {
 			state = reducer(e, state, event)
@@ -160,7 +160,7 @@ func (e *Engine) Emit(event Event) bool {
 	}
 
 	// No validators or all validators passed - commit the event to repository
-	if err := e.repository.Add(event); err != nil {
+	if err := e.repository.Add(e, event); err != nil {
 		return false // persistence failure
 	}
 
@@ -177,13 +177,13 @@ func (e *Engine) Emit(event Event) bool {
 
 // GetEvents returns all events in the system
 func (e *Engine) GetEvents() []Event {
-	return e.repository.GetAll()
+	return e.repository.GetAll(e)
 }
 
 // SetEvents sets the events directly (for rebuilding from event log)
 // Panics if the repository fails to set events
 func (e *Engine) SetEvents(events []Event) {
-	if err := e.repository.SetAll(events); err != nil {
+	if err := e.repository.SetAll(e, events); err != nil {
 		panic("failed to set events in repository: " + err.Error())
 	}
 }

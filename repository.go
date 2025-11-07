@@ -13,18 +13,18 @@ func NewInMemoryRepository() *InMemoryRepository {
 }
 
 // Add commits a new event to the in-memory store
-func (r *InMemoryRepository) Add(event Event) error {
+func (r *InMemoryRepository) Add(engine *Engine, event Event) error {
 	r.events = append(r.events, event)
 	return nil
 }
 
 // GetAll returns all events from the in-memory store
-func (r *InMemoryRepository) GetAll() []Event {
+func (r *InMemoryRepository) GetAll(engine *Engine) []Event {
 	return append([]Event{}, r.events...)
 }
 
 // SetAll atomically replaces all events in the in-memory store
-func (r *InMemoryRepository) SetAll(events []Event) error {
+func (r *InMemoryRepository) SetAll(engine *Engine, events []Event) error {
 	r.events = append([]Event{}, events...)
 	return nil
 }
