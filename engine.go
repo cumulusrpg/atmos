@@ -2,6 +2,11 @@ package atmos
 
 import (
 	"encoding/json"
+	"errors"
+	"reflect"
+
+	"github.com/cumulusrpg/atmos/repository"
+	"github.com/cumulusrpg/atmos/types"
 )
 
 // StateReducer represents a function that reduces an event into a state
@@ -15,7 +20,7 @@ type StateRegistry struct {
 
 // Engine coordinates event emission, validation, and commitment
 type Engine struct {
-	repository     EventRepository                 // event storage abstraction
+	repository     types.EventRepository           // event storage abstraction
 	validators     map[string][]EventValidator     // event type -> validators
 	exceptions     map[string][]ValidatorException // event type -> validator exceptions
 	beforeHooks    map[string][]EventListener      // event type -> pre-commit hooks
@@ -29,16 +34,16 @@ type Engine struct {
 type EngineOption func(*Engine)
 
 // WithRepository sets a custom event repository
-func WithRepository(repository EventRepository) EngineOption {
+func WithRepository(repo types.EventRepository) EngineOption {
 	return func(e *Engine) {
-		e.repository = repository
+		e.repository = repo
 	}
 }
 
 // NewEngine creates a new engine with optional configuration
 func NewEngine(opts ...EngineOption) *Engine {
 	engine := &Engine{
-		repository:     NewInMemoryRepository(), // default repository
+		repository:     repository.NewInMemory(), // default repository
 		validators:     make(map[string][]EventValidator),
 		exceptions:     make(map[string][]ValidatorException),
 		beforeHooks:    make(map[string][]EventListener),
@@ -102,13 +107,26 @@ func (e *Engine) GetService(name string) interface{} {
 }
 
 // GetState runs reducers on the current event log for a state
+// If the repository supports snapshots and a snapshot exists, it starts from the snapshot
+// merged over the initial state (partial snapshots are supported).
 func (e *Engine) GetState(name string) interface{} {
 	registry, exists := e.states[name]
 	if !exists {
 		return nil
 	}
 
+	// Start with initial state
 	state := registry.InitialState
+
+	// Check if repository supports snapshots and has one for this state
+	if snapshotRepo, ok := e.repository.(types.SnapshotRepository); ok {
+		if snapshotData, hasSnapshot := snapshotRepo.GetSnapshot(name); hasSnapshot {
+			// Merge snapshot over initial state (supports partial snapshots)
+			state = e.mergeSnapshot(state, snapshotData)
+		}
+	}
+
+	// Apply events
 	for _, event := range e.repository.GetAll(e) {
 		reducer, hasReducer := registry.Reducers[event.Type()]
 		if hasReducer {
@@ -238,4 +256,80 @@ func (e *Engine) UnmarshalEvents(jsonData []byte) ([]Event, error) {
 	}
 
 	return events, nil
+}
+
+// =============================================================================
+// Snapshot API
+// =============================================================================
+
+// SetSnapshot stores a snapshot for a state. The snapshot can be a struct or a map.
+// Partial snapshots are supported - only provided fields will override defaults.
+// Returns an error if the repository doesn't support snapshots.
+func (e *Engine) SetSnapshot(stateName string, snapshot interface{}) error {
+	snapshotRepo, ok := e.repository.(types.SnapshotRepository)
+	if !ok {
+		return errors.New("repository does not support snapshots")
+	}
+
+	// Serialize the snapshot to JSON
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+
+	return snapshotRepo.SetSnapshot(stateName, data)
+}
+
+// ClearSnapshot removes the snapshot for a state.
+// Returns an error if the repository doesn't support snapshots.
+func (e *Engine) ClearSnapshot(stateName string) error {
+	snapshotRepo, ok := e.repository.(types.SnapshotRepository)
+	if !ok {
+		return errors.New("repository does not support snapshots")
+	}
+
+	return snapshotRepo.ClearSnapshot(stateName)
+}
+
+// HasSnapshot returns true if a snapshot exists for the given state.
+// Returns false if the repository doesn't support snapshots.
+func (e *Engine) HasSnapshot(stateName string) bool {
+	snapshotRepo, ok := e.repository.(types.SnapshotRepository)
+	if !ok {
+		return false
+	}
+
+	_, exists := snapshotRepo.GetSnapshot(stateName)
+	return exists
+}
+
+// mergeSnapshot merges snapshot JSON data over an initial state value.
+// This supports partial snapshots where only some fields are provided.
+func (e *Engine) mergeSnapshot(initialState interface{}, snapshotData []byte) interface{} {
+	// Get the type of the initial state
+	initialType := reflect.TypeOf(initialState)
+	if initialType.Kind() == reflect.Ptr {
+		initialType = initialType.Elem()
+	}
+
+	// Create a new instance of the initial state type
+	newState := reflect.New(initialType).Interface()
+
+	// First, marshal the initial state to JSON and unmarshal into the new instance
+	// This creates a deep copy
+	initialJSON, err := json.Marshal(initialState)
+	if err != nil {
+		return initialState
+	}
+	if err := json.Unmarshal(initialJSON, newState); err != nil {
+		return initialState
+	}
+
+	// Now unmarshal the snapshot data over it (partial merge)
+	if err := json.Unmarshal(snapshotData, newState); err != nil {
+		return initialState
+	}
+
+	// Return the dereferenced value to match the original type
+	return reflect.ValueOf(newState).Elem().Interface()
 }

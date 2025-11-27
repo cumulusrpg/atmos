@@ -3,6 +3,8 @@ package atmos
 import (
 	"errors"
 	"testing"
+
+	"github.com/cumulusrpg/atmos/types"
 )
 
 // Test event for repository tests
@@ -21,7 +23,7 @@ type CustomRepository struct {
 	shouldFail bool
 }
 
-func (r *CustomRepository) Add(engine *Engine, event Event) error {
+func (r *CustomRepository) Add(engine types.Engine, event types.Event) error {
 	r.addCalls++
 	if r.shouldFail {
 		return errors.New("simulated repository failure")
@@ -30,12 +32,12 @@ func (r *CustomRepository) Add(engine *Engine, event Event) error {
 	return nil
 }
 
-func (r *CustomRepository) GetAll(engine *Engine) []Event {
-	return append([]Event{}, r.events...)
+func (r *CustomRepository) GetAll(engine types.Engine) []types.Event {
+	return append([]types.Event{}, r.events...)
 }
 
-func (r *CustomRepository) SetAll(engine *Engine, events []Event) error {
-	r.events = append([]Event{}, events...)
+func (r *CustomRepository) SetAll(engine types.Engine, events []types.Event) error {
+	r.events = append([]types.Event{}, events...)
 	return nil
 }
 
