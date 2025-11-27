@@ -280,6 +280,38 @@ func TestSnapshotMergeWithInvalidJSON(t *testing.T) {
 	assert.Equal(t, initialState, result)
 }
 
+// TestSnapshotMergeWithPointerState verifies mergeSnapshot handles pointer initial states
+func TestSnapshotMergeWithPointerState(t *testing.T) {
+	engine := NewEngine()
+
+	type SimpleState struct {
+		Value int
+	}
+
+	initialState := &SimpleState{Value: 42}
+
+	// Should merge correctly even when initial state is a pointer
+	result := engine.mergeSnapshot(initialState, []byte(`{"Value": 100}`))
+	resultState := result.(SimpleState)
+	assert.Equal(t, 100, resultState.Value)
+}
+
+// TestSnapshotMergeWithUnmarshalableState verifies mergeSnapshot handles unmarshalable initial state
+func TestSnapshotMergeWithUnmarshalableState(t *testing.T) {
+	engine := NewEngine()
+
+	// A struct with a channel field cannot be marshaled
+	type UnmarshalableState struct {
+		Ch chan int
+	}
+
+	initialState := UnmarshalableState{Ch: make(chan int)}
+
+	// Should return initial state unchanged when marshal fails
+	result := engine.mergeSnapshot(initialState, []byte(`{}`))
+	assert.Equal(t, initialState, result)
+}
+
 // TestSetSnapshotWithUnmarshalableData verifies SetSnapshot handles unmarshalable data
 func TestSetSnapshotWithUnmarshalableData(t *testing.T) {
 	engine := NewEngine(WithRepository(repository.NewInMemorySnapshot()))
