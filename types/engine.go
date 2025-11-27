@@ -17,4 +17,10 @@ type Engine interface {
 
 	// GetService retrieves a registered service by name
 	GetService(name string) interface{}
+
+	// MarshalEvents serializes events to JSON
+	MarshalEvents(events []Event) ([]byte, error)
+
+	// UnmarshalEvents deserializes events from JSON
+	UnmarshalEvents(jsonData []byte) ([]Event, error)
 }
