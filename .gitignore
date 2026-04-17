@@ -26,3 +26,7 @@ vendor/
 *.swp
 *.swo
 *~
+
+# JavaScript (js/)
+node_modules/
+coverage/

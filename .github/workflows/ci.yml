@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  test:
-    name: Test
+  test-go:
+    name: Test (Go)
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -41,10 +41,46 @@ jobs:
       uses: codecov/codecov-action@v5
       with:
         file: ./coverage.txt
-        flags: unittests
-        name: codecov-umbrella
+        flags: go
+        name: codecov-go
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: false  # Don't fail CI if Codecov upload fails
+
+  test-js:
+    name: Test (JS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./js
+    strategy:
+      matrix:
+        node-version: ['20', '22']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: js/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run tests with coverage
+      run: npm run test:coverage
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        files: ./js/coverage/lcov.info
+        flags: js
+        name: codecov-js
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false
 
   lint:
     name: Lint
