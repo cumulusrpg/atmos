@@ -1,11 +1,15 @@
 # Atmos
 
 [![CI](https://github.com/cumulusrpg/atmos/workflows/CI/badge.svg)](https://github.com/cumulusrpg/atmos/actions)
+[![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+
+**Go** &nbsp;
 [![Go Report Card](https://goreportcard.com/badge/github.com/cumulusrpg/atmos)](https://goreportcard.com/report/github.com/cumulusrpg/atmos)
 [![codecov (Go)](https://codecov.io/gh/cumulusrpg/atmos/branch/main/graph/badge.svg?flag=go)](https://codecov.io/gh/cumulusrpg/atmos)
-[![codecov (JS)](https://codecov.io/gh/cumulusrpg/atmos/branch/main/graph/badge.svg?flag=js)](https://codecov.io/gh/cumulusrpg/atmos)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/cumulusrpg/atmos)](https://github.com/cumulusrpg/atmos/blob/main/go.mod)
-[![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+
+**JS** &nbsp;
+[![codecov (JS)](https://codecov.io/gh/cumulusrpg/atmos/branch/main/graph/badge.svg?flag=js)](https://codecov.io/gh/cumulusrpg/atmos)
 
 **An event-sourcing primitive that makes complex business logic simple, testable, and auditable.**
 
