@@ -1,0 +1,22 @@
+{
+  "name": "@cumulusrpg/atmos",
+  "version": "0.0.0",
+  "description": "JavaScript implementation of the atmos event-sourcing engine",
+  "type": "module",
+  "main": "src/engine.js",
+  "exports": {
+    ".": "./src/engine.js"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test 'test/**/*.test.js'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cumulusrpg/atmos.git",
+    "directory": "js"
+  },
+  "license": "MIT"
+}
