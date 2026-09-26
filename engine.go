@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 
 	"github.com/cumulusrpg/atmos/repository"
 	"github.com/cumulusrpg/atmos/types"
@@ -28,6 +29,9 @@ type Engine struct {
 	states         map[string]StateRegistry        // state name -> state registry
 	eventFactories map[string]func() Event         // event type -> factory function
 	services       map[string]interface{}          // service name -> service instance (service locator)
+
+	batch   []Event // events validated but not yet committed (see EmitAll)
+	inBatch bool
 }
 
 // EngineOption configures engine construction
@@ -126,8 +130,8 @@ func (e *Engine) GetState(name string) interface{} {
 		}
 	}
 
-	// Apply events
-	for _, event := range e.repository.GetAll(e) {
+	// Apply events, and the batch in progress, if any
+	for _, event := range e.GetEvents() {
 		reducer, hasReducer := registry.Reducers[event.Type()]
 		if hasReducer {
 			state = reducer(e, state, event)
@@ -137,65 +141,99 @@ func (e *Engine) GetState(name string) interface{} {
 	return state
 }
 
-// Emit attempts to emit an event through validation and commitment
+// Emit attempts to emit an event through validation and commitment.
+// It's EmitAll with one event.
 func (e *Engine) Emit(event Event) bool {
-	// Get validators for this event type
-	validators, exists := e.validators[event.Type()]
-	if exists {
-		// Get exceptions for this event type
-		exceptions := e.exceptions[event.Type()]
+	return e.EmitAll(event)
+}
 
-		// All validators must approve (unless exception applies)
-		for _, validator := range validators {
-			// Check if any exception applies to skip this validator
-			shouldSkip := false
-			for _, exception := range exceptions {
-				if exception.Validator == validator && exception.Condition(e, event) {
-					shouldSkip = true
-					break
-				}
+// EmitAll commits events together, in order, or not at all. Each is
+// validated against the state the ones before it leave — GetState,
+// while a batch is being validated, answers with the batch so far — and
+// if any is refused, nothing is committed and no listener hears of any
+// of them. Before hooks run inside the batch, and whatever they emit
+// joins it; listeners run once the whole batch is in, and whatever
+// they emit is a batch of its own.
+//
+// Called while a batch is in progress (from a before hook or a
+// validator), EmitAll adds to that batch; if it's refused, only its own
+// events are dropped.
+func (e *Engine) EmitAll(events ...Event) bool {
+	outer := !e.inBatch
+	e.inBatch = true
+	mark := len(e.batch)
+	for _, event := range events {
+		if !e.stage(event) {
+			e.batch = e.batch[:mark]
+			if outer {
+				e.inBatch = false
 			}
+			return false
+		}
+	}
+	if !outer {
+		return true
+	}
+	batch := e.batch
+	e.batch, e.inBatch = nil, false
 
-			// Skip validation if exception applies
-			if shouldSkip {
-				continue
-			}
-
-			// Run validator
-			if !validator.Validate(e, event) {
-				return false // validation failed
-			}
+	for _, event := range batch {
+		if err := e.repository.Add(e, event); err != nil {
+			return false // persistence failure
 		}
 	}
 
-	// Call before hooks AFTER validation but BEFORE commitment
-	// This allows side effects (like fate dice) to run as part of the event's transaction
-	beforeHooks, hasBeforeHooks := e.beforeHooks[event.Type()]
-	if hasBeforeHooks {
-		for _, hook := range beforeHooks {
-			hook.Handle(e, event)
-		}
-	}
-
-	// No validators or all validators passed - commit the event to repository
-	if err := e.repository.Add(e, event); err != nil {
-		return false // persistence failure
-	}
-
-	// Call listeners after commitment
-	listeners, hasListeners := e.listeners[event.Type()]
-	if hasListeners {
-		for _, listener := range listeners {
+	// Call listeners after the whole batch is committed
+	for _, event := range batch {
+		for _, listener := range e.listeners[event.Type()] {
 			listener.Handle(e, event)
 		}
 	}
-
 	return true
 }
 
-// GetEvents returns all events in the system
+// stage validates event against the batch so far, runs its before
+// hooks, and adds it to the batch.
+func (e *Engine) stage(event Event) bool {
+	// Get exceptions for this event type
+	exceptions := e.exceptions[event.Type()]
+
+	// All validators must approve (unless exception applies)
+	for _, validator := range e.validators[event.Type()] {
+		// Check if any exception applies to skip this validator
+		shouldSkip := false
+		for _, exception := range exceptions {
+			if exception.Validator == validator && exception.Condition(e, event) {
+				shouldSkip = true
+				break
+			}
+		}
+
+		// Skip validation if exception applies
+		if shouldSkip {
+			continue
+		}
+
+		// Run validator
+		if !validator.Validate(e, event) {
+			return false // validation failed
+		}
+	}
+
+	// Call before hooks AFTER validation but BEFORE the event joins the
+	// batch: whatever they emit lands ahead of it, in the same batch
+	for _, hook := range e.beforeHooks[event.Type()] {
+		hook.Handle(e, event)
+	}
+
+	e.batch = append(e.batch, event)
+	return true
+}
+
+// GetEvents returns all events in the system — while a batch is being
+// validated, including the batch so far
 func (e *Engine) GetEvents() []Event {
-	return e.repository.GetAll(e)
+	return slices.Concat(e.repository.GetAll(e), e.batch)
 }
 
 // SetEvents sets the events directly (for rebuilding from event log)

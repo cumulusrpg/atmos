@@ -6,6 +6,9 @@ type Engine interface {
 	// Emit attempts to emit an event through validation and commitment
 	Emit(event Event) bool
 
+	// EmitAll commits events together, in order, or not at all
+	EmitAll(events ...Event) bool
+
 	// GetState runs reducers on the current event log for a state
 	GetState(name string) interface{}
 
