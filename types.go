@@ -52,6 +52,20 @@ type TypedEventListener[T Event] interface {
 	HandleTyped(engine *Engine, event T)
 }
 
+// TypedValidatorFunc is a helper for creating validators from functions
+type TypedValidatorFunc[T Event] func(*Engine, T) bool
+
+func (f TypedValidatorFunc[T]) ValidateTyped(engine *Engine, event T) bool {
+	return f(engine, event)
+}
+
+// TypedListenerFunc is a helper for creating listeners from functions
+type TypedListenerFunc[T Event] func(*Engine, T)
+
+func (f TypedListenerFunc[T]) HandleTyped(engine *Engine, event T) {
+	f(engine, event)
+}
+
 // ValidatorWrapper wraps a typed validator to implement the base interface
 type ValidatorWrapper[T Event] struct {
 	validator TypedEventValidator[T]
