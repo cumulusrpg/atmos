@@ -132,3 +132,17 @@ func Valid[T Event](validator TypedEventValidator[T]) EventValidator {
 func Do[T Event](listener TypedEventListener[T]) EventListener {
 	return NewTypedListener(listener)
 }
+
+// ValidFunc wraps a plain function as a validator, its event type
+// inferred from the function
+// Usage: Requires(ValidFunc(func(e *Engine, ev OrderPlacedEvent) bool { ... }))
+func ValidFunc[T Event](validate func(*Engine, T) bool) EventValidator {
+	return NewTypedValidator(TypedValidatorFunc[T](validate))
+}
+
+// DoFunc wraps a plain function as a listener, its event type inferred
+// from the function
+// Usage: Then(DoFunc(func(e *Engine, ev OrderPlacedEvent) { ... }))
+func DoFunc[T Event](handle func(*Engine, T)) EventListener {
+	return NewTypedListener(TypedListenerFunc[T](handle))
+}

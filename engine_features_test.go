@@ -231,20 +231,6 @@ func TestMarshalUnmarshalRoundTrip(t *testing.T) {
 	assert.Equal(t, "ORD-3", finalEvents[2].(*OrderPlacedEvent).OrderID)
 }
 
-// TypedValidatorFunc is a helper for creating validators from functions
-type TypedValidatorFunc[T Event] func(*Engine, T) bool
-
-func (f TypedValidatorFunc[T]) ValidateTyped(engine *Engine, event T) bool {
-	return f(engine, event)
-}
-
-// TypedListenerFunc is a helper for creating listeners from functions
-type TypedListenerFunc[T Event] func(*Engine, T)
-
-func (f TypedListenerFunc[T]) HandleTyped(engine *Engine, event T) {
-	f(engine, event)
-}
-
 // TestSnapshotWithNonSnapshotRepository verifies snapshot methods handle non-snapshot repos gracefully
 func TestSnapshotWithNonSnapshotRepository(t *testing.T) {
 	// Default engine uses InMemory which doesn't support snapshots
