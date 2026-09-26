@@ -308,7 +308,7 @@ func (e *Engine) HasSnapshot(stateName string) bool {
 func (e *Engine) mergeSnapshot(initialState interface{}, snapshotData []byte) interface{} {
 	// Get the type of the initial state
 	initialType := reflect.TypeOf(initialState)
-	if initialType.Kind() == reflect.Ptr {
+	if initialType.Kind() == reflect.Pointer {
 		initialType = initialType.Elem()
 	}
 

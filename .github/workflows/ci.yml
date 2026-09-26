@@ -12,7 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.22', '1.23', '1.24']
+        # The oldest Go that go.mod promises, and the newest release.
+        go: ['go.mod', 'stable']
+
+    env:
+      GOTOOLCHAIN: local  # test the version set up, never a silent download
 
     steps:
     - name: Checkout code
@@ -21,7 +25,8 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version-file: ${{ matrix.go == 'go.mod' && 'go.mod' || '' }}
+        go-version: ${{ matrix.go == 'stable' && 'stable' || '' }}
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -54,7 +59,7 @@ jobs:
         working-directory: ./js
     strategy:
       matrix:
-        node-version: ['20', '22']
+        node-version: ['22', '24']
 
     steps:
     - name: Checkout code
@@ -93,9 +98,9 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
+        go-version: stable
 
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v4
+      uses: golangci/golangci-lint-action@v9
       with:
         version: latest
