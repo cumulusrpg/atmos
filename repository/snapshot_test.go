@@ -25,7 +25,7 @@ func TestInMemorySnapshot_RestoreEventsFromLog(t *testing.T) {
 		Count int
 	}
 
-	engine.RegisterState("counter", Counter{Count: 0})
+	engine.RegisterState("counter", func() interface{} { return Counter{Count: 0} })
 	engine.When("simple").Updates("counter", func(e *atmos.Engine, state interface{}, event atmos.Event) interface{} {
 		s := state.(Counter)
 		s.Count += event.(SimpleEvent).Value

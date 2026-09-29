@@ -184,7 +184,9 @@ func ReduceItemAdded(engine *atmos.Engine, state interface{}, event atmos.Event)
 func NewInventorySystem() *atmos.Engine {
     engine := atmos.NewEngine()
 
-    engine.RegisterState("inventory", InventoryState{Items: make(map[string]int)})
+    engine.RegisterState("inventory", func() interface{} {
+        return InventoryState{Items: make(map[string]int)}
+    })
 
     engine.When("item_added", func() atmos.Event { return &ItemAddedEvent{} }).
         Requires(atmos.Valid(&PositiveQuantity{})).
@@ -233,7 +235,7 @@ Events are:
 
 ### State
 
-State is **derived from events** using pure reducer functions:
+State is **derived from events** by reducers, each folding one event into the state:
 
 ```go
 func ReduceOrderPlaced(engine *atmos.Engine, state interface{}, event atmos.Event) interface{} {
@@ -252,7 +254,13 @@ func ReduceOrderPlaced(engine *atmos.Engine, state interface{}, event atmos.Even
 }
 ```
 
-State is never directly mutated. It's always recalculated from events.
+A state is registered with a function that makes its initial value. The engine
+keeps each state current, reducing every event once, as it's emitted, so
+reading a state doesn't replay the log. A reducer may change the state it's
+given, as `ReduceOrderPlaced` does: whenever an event is undone (a refused
+batch, say), the engine throws the state away and rebuilds it from a new
+initial value and the log. The state `GetState` returns is the engine's own:
+read it, don't change it.
 
 ### Validators
 
@@ -495,9 +503,9 @@ Validators Check ──→ [REJECT if any fail]
     ↓
 Before Hooks Run (transactional)
     ↓
-Event Committed to Repository ← [Point of no return]
+State Reducers Apply
     ↓
-State Reducers Apply (pure functions)
+Event Committed to Repository ← [Point of no return]
     ↓
 Listeners Run (side effects)
     ↓

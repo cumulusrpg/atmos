@@ -43,6 +43,7 @@ func (r *EventRegistration) WithReducer(stateName string, reducer StateReducer) 
 		// Add reducer to existing registry
 		registry.Reducers[r.eventType] = reducer
 		r.engine.states[stateName] = registry
+		r.engine.current = nil // the state so far didn't have this reducer
 	}
 	// If state doesn't exist, this is a no-op (state must be registered first)
 	return r

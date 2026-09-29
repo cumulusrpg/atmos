@@ -35,7 +35,7 @@ func (ShelfHoldsItem) ValidateTyped(e *Engine, ev ItemTakenEvent) bool {
 
 func shelfEngine() *Engine {
 	engine := NewEngine()
-	engine.RegisterState("shelves", Shelves{})
+	engine.RegisterState("shelves", func() interface{} { return Shelves{} })
 	engine.When("item_put").
 		Requires(Valid(ShelfIsEmpty{})).
 		Updates("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
