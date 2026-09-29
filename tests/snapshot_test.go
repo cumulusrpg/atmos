@@ -69,7 +69,7 @@ func (ctx *snapshotTestContext) anEngineWithStandardRepository() error {
 
 func (ctx *snapshotTestContext) aStateWithDefaultValues(stateName string, table *godog.Table) error {
 	ctx.engine.RegisterState(stateName, func() interface{} { return NewGameState() })
-	ctx.engine.When("score").Updates(stateName, ReduceScore)
+	ctx.engine.When("score").WithReducer(stateName, ReduceScore)
 	return nil
 }
 

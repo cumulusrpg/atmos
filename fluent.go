@@ -99,10 +99,10 @@ func (r *EventRegistration) Then(listeners ...EventListener) *EventRegistration 
 	return r
 }
 
-// Updates is an alias for WithReducer() to describe state changes
-// Usage: When("player_registered").Updates("players", reducer)
-func (r *EventRegistration) Updates(stateName string, reducer StateReducer) *EventRegistration {
-	return r.WithReducer(stateName, reducer)
+// Updates says what this event does to a state, through its handle
+// Usage: When("player_registered").Updates(Reduces(players, addPlayer))
+func (r *EventRegistration) Updates(update Update) *EventRegistration {
+	return r.WithReducer(update.state, update.reducer)
 }
 
 // Except creates an exception to skip a validator under certain conditions

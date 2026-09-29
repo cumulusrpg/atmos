@@ -38,14 +38,14 @@ func shelfEngine() *Engine {
 	engine.RegisterState("shelves", func() interface{} { return Shelves{} })
 	engine.When("item_put").
 		Requires(Valid(ShelfIsEmpty{})).
-		Updates("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
+		WithReducer("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
 			s, ev := clone(state.(Shelves)), event.(ItemPutEvent)
 			s[ev.Shelf] = ev.Item
 			return s
 		})
 	engine.When("item_taken").
 		Requires(Valid(ShelfHoldsItem{})).
-		Updates("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
+		WithReducer("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
 			s, ev := clone(state.(Shelves)), event.(ItemTakenEvent)
 			delete(s, ev.Shelf)
 			return s

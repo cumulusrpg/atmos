@@ -30,20 +30,20 @@ The `GameState` struct holds the current game state:
 ### 3. Validators (validators.go)
 
 Validators ensure events are valid before they're committed:
-- `ValidMove` - Checks if a move is legal (correct player, valid position, game ongoing)
-- `GameNotStarted` - Ensures game can only start once
+- `validMove` - Checks if a move is legal (correct player, valid position, game ongoing)
+- `notStarted` - Ensures game can only start once
 
 ### 4. Reducers (reducers.go)
 
 Reducers update state in response to events:
-- `ReduceGameStarted` - Initializes game state
-- `ReduceMoveMade` - Updates board and switches players
-- `ReduceGameEnded` - Records the winner
+- `reduceGameStarted` - Initializes game state
+- `reduceMoveMade` - Updates board and switches players
+- `reduceGameEnded` - Records the winner
 
 ### 5. Listeners (listeners.go)
 
 Listeners trigger side effects after events:
-- `CheckForWinner` - Automatically checks for a winner after each move and emits `GameEndedEvent`
+- `checkForWinner` - Automatically checks for a winner after each move and emits `GameEndedEvent`
 
 ### 6. Game Setup (game.go)
 

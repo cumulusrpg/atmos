@@ -17,7 +17,7 @@ func inPlaceShelfEngine(counted *Counted, opts ...EngineOption) *Engine {
 	engine.RegisterState("shelves", func() interface{} { return Shelves{} })
 	engine.When("item_put").
 		Requires(Valid(ShelfIsEmpty{})).
-		Updates("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
+		WithReducer("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
 			counted.calls++
 			s, ev := state.(Shelves), event.(ItemPutEvent)
 			s[ev.Shelf] = ev.Item
@@ -25,7 +25,7 @@ func inPlaceShelfEngine(counted *Counted, opts ...EngineOption) *Engine {
 		})
 	engine.When("item_taken").
 		Requires(Valid(ShelfHoldsItem{})).
-		Updates("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
+		WithReducer("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
 			counted.calls++
 			s, ev := state.(Shelves), event.(ItemTakenEvent)
 			delete(s, ev.Shelf)
@@ -109,7 +109,7 @@ func TestState_AReducerAddedLaterSeesTheWholeLog(t *testing.T) {
 	engine.Emit(ItemPutEvent{"b", "jar"})
 	engine.GetState("puts")
 
-	engine.When("item_put").Updates("puts", func(_ *Engine, state interface{}, _ Event) interface{} {
+	engine.When("item_put").WithReducer("puts", func(_ *Engine, state interface{}, _ Event) interface{} {
 		return state.(int) + 1
 	})
 

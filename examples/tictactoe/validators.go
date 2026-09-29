@@ -1,12 +1,8 @@
 package tictactoe
 
-import "github.com/cumulusrpg/atmos"
-
-// ValidMove validates that a move is legal
-type ValidMove struct{}
-
-func (v *ValidMove) ValidateTyped(engine *atmos.Engine, event MoveMadeEvent) bool {
-	state := engine.GetState("game").(GameState)
+// validMove is the rule that a move is legal
+func (g *Game) validMove(event MoveMadeEvent) bool {
+	state := g.state.Get()
 
 	// Game must be started
 	if !state.GameStarted {
@@ -27,10 +23,7 @@ func (v *ValidMove) ValidateTyped(engine *atmos.Engine, event MoveMadeEvent) boo
 	return state.IsPositionEmpty(event.Position)
 }
 
-// GameNotStarted validates that the game hasn't started yet
-type GameNotStarted struct{}
-
-func (v *GameNotStarted) ValidateTyped(engine *atmos.Engine, event GameStartedEvent) bool {
-	state := engine.GetState("game").(GameState)
-	return !state.GameStarted
+// notStarted is the rule that the game hasn't started yet
+func (g *Game) notStarted(GameStartedEvent) bool {
+	return !g.state.Get().GameStarted
 }
