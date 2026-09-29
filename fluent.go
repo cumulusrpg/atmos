@@ -101,9 +101,17 @@ func (r *EventRegistration) Then(listeners ...EventListener) *EventRegistration 
 
 // Updates says what this event does to a state, through its handle
 // Usage: When("player_registered").Updates(Reduces(players, addPlayer))
-func (r *EventRegistration) Updates(update Update) *EventRegistration {
-	return r.WithReducer(update.state, update.reducer)
+func (r *EventRegistration) Updates(update Updater) *EventRegistration {
+	state, reducer := update.update()
+	return r.WithReducer(state, reducer)
 }
+
+// Updater is an Update, whatever its event type.
+type Updater interface {
+	update() (state string, reducer StateReducer)
+}
+
+func (u Update[T]) update() (string, StateReducer) { return u.state, u.reducer }
 
 // Except creates an exception to skip a validator under certain conditions
 // This explicitly documents when and why validation rules are bypassed

@@ -56,21 +56,17 @@ This becomes unmaintainable as complexity grows. When something goes wrong, you 
 
 ## The Atmos Way
 
-Atmos separates concerns and makes every rule explicit:
+Atmos separates concerns and makes every rule explicit. An engine's definition
+reads as what the system does:
 
 ```go
-engine.When("order_placed", func() atmos.Event { return &OrderPlacedEvent{} }).
-    Requires(
-        atmos.Valid(&SufficientInventory{}),
-        atmos.Valid(&ValidCustomer{}),
-    ).
-    Then(
-        atmos.Do(&ReserveInventory{}),
-        atmos.Do(&NotifyWarehouse{}),
-        atmos.Do(&SendConfirmationEmail{}),
-    ).
-    Updates(atmos.Reduces(orders, reduceOrderPlaced)).
-    Updates(atmos.Reduces(inventory, reduceInventoryReserved))
+// What can be done
+atmos.Command[PlaceOrder](e).Decides(shop.placeOrder)
+
+// What can happen, and when it's allowed
+atmos.On[OrderPlaced](e).
+    Requires(shop.validCustomer, shop.sufficientInventory).
+    Then(shop.notifyWarehouse, shop.sendConfirmation)
 ```
 
 **Every rule is visible.** No hidden logic. No surprises.
@@ -83,7 +79,7 @@ Every action is recorded as an immutable event:
 
 ```go
 events := engine.GetEvents()
-// [OrderPlacedEvent, PaymentProcessedEvent, OrderShippedEvent, ...]
+// [OrderPlaced, PaymentProcessed, OrderShipped, ...]
 ```
 
 You can answer questions like:
@@ -112,11 +108,10 @@ Every component is isolated and pure:
 
 ```go
 func TestSufficientInventory(t *testing.T) {
-    validator := SufficientInventory{}
-    engine := setupTestEngine()
+    shop := newTestShop()
 
-    event := OrderPlacedEvent{ProductID: "ABC", Quantity: 5}
-    assert.True(t, validator.ValidateTyped(engine, event))
+    event := OrderPlaced{ProductID: "ABC", Quantity: 5}
+    assert.True(t, shop.sufficientInventory(event))
 }
 ```
 
@@ -128,8 +123,8 @@ Add new features without changing existing code:
 
 ```go
 // New requirement: send SMS on high-value orders
-engine.When("order_placed").
-    Then(atmos.Do(&SendSMSForHighValue{}))  // Just add it!
+atmos.On[OrderPlaced](e).
+    Then(shop.smsIfHighValue)  // Just add it!
 ```
 
 The open/closed principle in action.
@@ -142,7 +137,7 @@ go get github.com/cumulusrpg/atmos
 
 ## Quick Start
 
-Here's a simple inventory system in ~30 lines:
+Here's a simple inventory system:
 
 ```go
 package main
@@ -153,62 +148,52 @@ import (
     "github.com/cumulusrpg/atmos"
 )
 
-// 1. Define events (immutable facts)
-type ItemAddedEvent struct {
+// 1. Define state
+type Stock map[string]int // item -> how many
+
+// 2. Define events (immutable facts), and what each does to the state
+type ItemAdded struct {
     ItemID   string
     Quantity int
 }
 
-func (e ItemAddedEvent) Type() string { return "item_added" }
+func (ItemAdded) Type() string { return "item_added" }
 
-// 2. Define state
-type InventoryState struct {
-    Items map[string]int
-}
-
-// 3. Create reducers (state changes)
-func reduceItemAdded(s InventoryState, e ItemAddedEvent) InventoryState {
-    s.Items[e.ItemID] += e.Quantity
+func (e ItemAdded) Apply(s Stock) Stock {
+    s[e.ItemID] += e.Quantity
     return s
 }
 
-// 4. Hold the engine and its state handles; rules are methods
+// 3. Hold the engine and its state handles; rules are methods
 type Inventory struct {
     engine *atmos.Engine
-    stock  atmos.State[InventoryState]
+    stock  atmos.State[Stock]
 }
 
-func (i *Inventory) positiveQuantity(event ItemAddedEvent) bool {
-    return event.Quantity > 0
+func (i *Inventory) positiveQuantity(e ItemAdded) bool {
+    return e.Quantity > 0
 }
 
-// 5. Wire it together with the fluent API
+// 4. Declare what can happen, and when it's allowed
 func NewInventory() *Inventory {
     engine := atmos.NewEngine()
     i := &Inventory{
         engine: engine,
-        stock: atmos.NewState(engine, "inventory", func() InventoryState {
-            return InventoryState{Items: make(map[string]int)}
-        }),
+        stock:  atmos.NewState(engine, "stock", func() Stock { return Stock{} }),
     }
 
-    engine.When("item_added", func() atmos.Event { return &ItemAddedEvent{} }).
-        Requires(atmos.Rule(i.positiveQuantity)).
-        Updates(atmos.Reduces(i.stock, reduceItemAdded))
+    atmos.On[ItemAdded](engine).Requires(i.positiveQuantity)
 
     return i
 }
 
-// 6. Use it
+// 5. Use it
 func main() {
     inventory := NewInventory()
 
-    inventory.engine.Emit(ItemAddedEvent{
-        ItemID:   "WIDGET-001",
-        Quantity: 100,
-    })
+    inventory.engine.Emit(ItemAdded{ItemID: "WIDGET-001", Quantity: 100})
 
-    fmt.Printf("Inventory: %+v\n", inventory.stock.Get().Items)
+    fmt.Printf("Inventory: %+v\n", inventory.stock.Get())
     // Output: Inventory: map[WIDGET-001:100]
 }
 ```
@@ -220,15 +205,18 @@ func main() {
 Events are **immutable facts** about what happened:
 
 ```go
-type OrderPlacedEvent struct {
+type OrderPlaced struct {
     OrderID    string
     CustomerID string
     Items      []OrderItem
     Total      float64
 }
 
-func (e OrderPlacedEvent) Type() string { return "order_placed" }
+func (OrderPlaced) Type() string { return "order_placed" }
 ```
+
+`atmos.On[OrderPlaced](e)` declares an event type on an engine; the type's name
+comes from the event, and events come back from JSON as the same type.
 
 Events are:
 - **Past tense** - "OrderPlaced" not "PlaceOrder"
@@ -237,43 +225,45 @@ Events are:
 
 ### State
 
-State is **derived from events** by reducers, each folding one event into the state:
+State is **derived from events**. `atmos.NewState` registers a state, with a
+function that makes its initial value, and returns its handle: `orders.Get()`
+reads it — typed, with no name to look up and no cast. A handle is bound to its
+engine, so it lives with whatever wires the engine.
+
+An event says what it does to its state, with an `Apply` method:
 
 ```go
-func reduceOrderPlaced(s OrderState, e OrderPlacedEvent) OrderState {
-    s.Orders[e.OrderID] = Order{
+func (e OrderPlaced) Apply(s Orders) Orders {
+    s[e.OrderID] = Order{
         ID:         e.OrderID,
         CustomerID: e.CustomerID,
         Items:      e.Items,
         Total:      e.Total,
         Status:     "pending",
     }
-
     return s
 }
 ```
 
-A state is registered with a function that makes its initial value, and
-`atmos.NewState` returns its handle: `orders.Get()` reads it, and
-`Updates(atmos.Reduces(orders, reduceOrderPlaced))` attaches a reducer — both
-typed, with no name to look up and no cast. A handle is bound to its engine, so
-it lives with whatever wires the engine. The engine
-keeps each state current, reducing every event once, as it's emitted, so
-reading a state doesn't replay the log. A reducer may change the state it's
-given, as `reduceOrderPlaced` does: whenever an event is undone (a refused
-batch, say), the engine throws the state away and rebuilds it from a new
-initial value and the log. The state `Get` returns is the engine's own: read
-it, don't change it.
+Any state of type `Orders` folds in `OrderPlaced` events through `Apply`, with no
+wiring. Other states that care about the event say so with `Updates` (see
+[Multiple State Updates](#multiple-state-updates)).
+
+The engine keeps each state current, applying every event once, as it's
+emitted, so reading a state doesn't replay the log. `Apply` may change the
+state it's given, as above: whenever an event is undone (a refused batch, say),
+the engine throws the state away and rebuilds it from a new initial value and
+the log. The state `Get` returns is the engine's own: read it, don't change it.
 
 ### Validators
 
-Validators **enforce business rules** before events commit. The simplest is a
+Validators **enforce business rules** before events commit. A rule is a
 method on whatever holds the engine's handles, so it reaches them — and any
 configuration — through its receiver:
 
 ```go
-// Requires(atmos.Rule(shop.sufficientInventory))
-func (shop *Shop) sufficientInventory(event OrderPlacedEvent) bool {
+// atmos.On[OrderPlaced](e).Requires(shop.sufficientInventory)
+func (shop *Shop) sufficientInventory(event OrderPlaced) bool {
     inventory := shop.inventory.Get()
 
     for _, item := range event.Items {
@@ -287,8 +277,9 @@ func (shop *Shop) sufficientInventory(event OrderPlacedEvent) bool {
 }
 ```
 
-A validator can also be a function of the engine and the event
-(`atmos.ValidFunc`), or a type with a `ValidateTyped` method (`atmos.Valid`).
+With the untyped `engine.When(eventType)`, a validator can also be a function of
+the engine and the event (`atmos.ValidFunc`), or a type with a `ValidateTyped`
+method (`atmos.Valid`).
 
 If **any** validator returns false, the event is rejected and nothing happens.
 
@@ -297,10 +288,9 @@ If **any** validator returns false, the event is rejected and nothing happens.
 Listeners trigger **side effects** after events commit:
 
 ```go
-type SendConfirmationEmail struct{}
-
-func (l *SendConfirmationEmail) HandleTyped(engine *atmos.Engine, event OrderPlacedEvent) {
-    customer := engine.GetState("customers").(CustomerState).Get(event.CustomerID)
+// atmos.On[OrderPlaced](e).Then(shop.sendConfirmation)
+func (shop *Shop) sendConfirmation(event OrderPlaced) {
+    customer := shop.customers.Get()[event.CustomerID]
 
     emailService.Send(EmailParams{
         To:      customer.Email,
@@ -321,50 +311,74 @@ Listeners run **after** the event is committed to the log. Use them for:
 Before hooks run **after validation** but **before commitment**:
 
 ```go
-engine.When("payment_processed").
-    Before(atmos.Do(&GenerateInvoiceNumber{})).  // Runs as part of transaction
-    Then(atmos.Do(&SendReceipt{}))               // Runs after commitment
+atmos.On[PaymentProcessed](e).
+    Before(shop.generateInvoiceNumber).  // Runs as part of transaction
+    Then(shop.sendReceipt)               // Runs after commitment
 ```
 
 Use before hooks when the side effect must be part of the same transaction (e.g., generating IDs, procedural content).
 
-## The Fluent API
+### Commands
 
-Chain methods to declare rules in one place:
+A command is something that can be done. Asked of the engine with `Do`, it
+decides — from the state as it is — what happens, as events, and they're
+emitted together, or not at all:
 
 ```go
-engine.When("order_placed", func() atmos.Event { return &OrderPlacedEvent{} }).
-    Requires(
-        atmos.Valid(&ValidCustomer{}),
-        atmos.Valid(&SufficientInventory{}),
-        atmos.Valid(&ValidPaymentMethod{}),
-    ).
-    Before(
-        atmos.Do(&GenerateOrderNumber{}),
-        atmos.Do(&CalculateTax{}),
-    ).
-    Then(
-        atmos.Do(&ReserveInventory{}),
-        atmos.Do(&ProcessPayment{}),
-        atmos.Do(&SendConfirmationEmail{}),
-        atmos.Do(&NotifyWarehouse{}),
-    ).
-    Updates(atmos.Reduces(orders, reduceOrderPlaced)).
-    Updates(atmos.Reduces(inventory, reduceInventoryReserved)).
-    Updates(atmos.Reduces(payments, reducePaymentProcessed))
+type Transfer struct {
+    From, To string
+    Amount   int
+}
+
+atmos.Command[Transfer](e).Decides(bank.transfer)
+
+func (bank *Bank) transfer(c Transfer) []atmos.Event {
+    if c.From == c.To {
+        return nil // nothing to do
+    }
+    return []atmos.Event{Withdrawn{c.From, c.Amount}, Deposited{c.To, c.Amount}}
+}
+
+ok := e.Do(Transfer{"alice", "bob", 50}) // both happen, or neither
+```
+
+Each event still answers to its own rules: if bob's account can't take the
+deposit, alice keeps her money. `Do` reports whether anything happened.
+Commands aren't events — they're never stored — so they can carry anything,
+behavior included. An action that's exactly one event doesn't need a command;
+emit the event.
+
+## The Fluent API
+
+Declare everything in one place — what can be done, and what can happen:
+
+```go
+// What can be done
+atmos.Command[PlaceOrder](e).Decides(shop.placeOrder)
+
+// What can happen, and when it's allowed
+atmos.On[OrderPlaced](e).
+    Requires(shop.validCustomer, shop.sufficientInventory, shop.validPaymentMethod).
+    Before(shop.generateOrderNumber, shop.calculateTax).
+    Then(shop.reserveInventory, shop.processPayment, shop.sendConfirmation).
+    Updates(atmos.Reduces(customers, countOrder))
 ```
 
 **Everything about this event is visible in one declaration.**
 
 ### Available Methods
 
-- `When(eventType, factory)` - Start declaring rules for an event
-- `Requires(...validators)` - Add validation rules (all must pass)
-- `Except(validator, condition, reason)` - Document exceptions to rules
+- `atmos.Command[C](e).Decides(decide)` - Declare what a command becomes, as events
+- `atmos.On[T](e)` - Start declaring rules for an event type
+- `Requires(...rules)` - Add validation rules (all must pass)
 - `Before(...hooks)` - Run before commit (transactional)
 - `Then(...listeners)` - Run after commit (side effects)
-- `Updates(atmos.Reduces(state, reducer))` - Update a state, through its handle, in response to event
-- `WithReducer(stateName, reducer)` - The same, untyped, by the state's name
+- `Updates(atmos.Reduces(state, reducer))` - Update a state other than the event's own
+
+The untyped `engine.When(eventType, factory)` chain takes validator and
+listener types, adds `Except(validator, condition, reason)` to document
+exceptions to rules, and `WithReducer(stateName, reducer)` for reducers by
+state name.
 
 ## Advanced Features
 
@@ -378,7 +392,7 @@ engine.When("order_placed").
     Except(
         atmos.Valid(&RequirePaymentMethod{}),
         func(e *atmos.Engine, event atmos.Event) bool {
-            order := event.(OrderPlacedEvent)
+            order := event.(OrderPlaced)
             return order.Total == 0  // Free orders don't need payment
         },
         "Free orders don't require payment method",
@@ -424,7 +438,7 @@ repo := &FileRepository{filepath: "events.jsonl"}
 engine := atmos.NewEngine(atmos.WithRepository(repo))
 
 // Events are now automatically persisted on every Emit()
-engine.Emit(OrderPlacedEvent{...})  // Saved to disk automatically!
+engine.Emit(OrderPlaced{...})  // Saved to disk automatically!
 ```
 
 Benefits:
@@ -486,17 +500,22 @@ Use for:
 
 ### Multiple State Updates
 
-One event can update multiple states:
+An event applies itself to its own state. Other states that care about it say
+so — the definition is where that decision is visible:
 
 ```go
-engine.When("order_placed").
-    Updates(atmos.Reduces(orders, reduceOrderPlaced)).
-    Updates(atmos.Reduces(inventory, reduceInventoryReserved)).
-    Updates(atmos.Reduces(customers, reduceCustomerOrderCount)).
-    Updates(atmos.Reduces(analytics, reduceOrderMetrics))
+atmos.On[OrderPlaced](e).
+    Updates(atmos.Reduces(customers, countOrder)).  // orders per customer
+    Updates(atmos.Reduces(analytics, recordSale))   // sales metrics
+
+func countOrder(s CustomerOrders, e OrderPlaced) CustomerOrders {
+    s[e.CustomerID]++
+    return s
+}
 ```
 
-Each reducer sees the event and updates its own state independently.
+Each reducer sees the event and updates its own state independently. An event
+that applies itself to a state can't also be reduced into it.
 
 ## Architecture
 
@@ -505,13 +524,13 @@ The event flow in Atmos:
 ```
 User Action
     ↓
-Event Created
+Command Decides (optional) ──→ the events that happen, together
     ↓
 Validators Check ──→ [REJECT if any fail]
     ↓
 Before Hooks Run (transactional)
     ↓
-State Reducers Apply
+Events Apply to State
     ↓
 Event Committed to Repository ← [Point of no return]
     ↓
@@ -533,7 +552,7 @@ Done
 - Test "what if" scenarios
 
 **Testability**
-- Pure functions everywhere
+- Rules, events and decisions are plain functions
 - No mocks needed
 - Fast, isolated unit tests
 
@@ -544,7 +563,7 @@ Done
 
 **Reliability**
 - Events are immutable
-- State is derived, never mutated
+- State is derived from events, never set directly
 - Transactions are atomic
 
 ## Examples

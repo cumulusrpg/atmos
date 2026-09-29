@@ -33,12 +33,12 @@ Validators ensure events are valid before they're committed:
 - `validMove` - Checks if a move is legal (correct player, valid position, game ongoing)
 - `notStarted` - Ensures game can only start once
 
-### 4. Reducers (reducers.go)
+### 4. What events do (events.go)
 
-Reducers update state in response to events:
-- `reduceGameStarted` - Initializes game state
-- `reduceMoveMade` - Updates board and switches players
-- `reduceGameEnded` - Records the winner
+Each event applies itself to the game state (its `Apply` method):
+- `GameStartedEvent` - Initializes game state
+- `MoveMadeEvent` - Updates board and switches players
+- `GameEndedEvent` - Records the winner
 
 ### 5. Listeners (listeners.go)
 
@@ -50,14 +50,9 @@ Listeners trigger side effects after events:
 The game uses Atmos's fluent API to wire everything together:
 
 ```go
-engine.When("game_started", func() atmos.Event { return &GameStartedEvent{} }).
-    Requires(atmos.Valid(&GameNotStarted{}))
-
-engine.When("move_made", func() atmos.Event { return &MoveMadeEvent{} }).
-    Requires(atmos.Valid(&ValidMove{})).
-    Then(atmos.Do(&CheckForWinner{}))
-
-engine.When("game_ended", func() atmos.Event { return &GameEndedEvent{} })
+atmos.On[GameStartedEvent](engine).Requires(g.notStarted)
+atmos.On[MoveMadeEvent](engine).Requires(g.validMove).Then(g.checkForWinner)
+atmos.On[GameEndedEvent](engine)
 ```
 
 ## Key Features Demonstrated

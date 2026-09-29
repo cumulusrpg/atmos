@@ -1,5 +1,7 @@
 package atmos
 
+import "fmt"
+
 // State is a handle on one of an engine's states: holding it is how
 // you read the state, and how you say what events do to it — no name
 // to look up, no cast. A handle is bound to the engine it was made on,
@@ -15,9 +17,28 @@ type State[S any] struct {
 // NewState registers a state on e, with a function that makes its
 // initial value, and returns its handle. The name is the state's key
 // for snapshots and for untyped callers of GetState.
+//
+// An event that has a method Apply(S) S applies itself to the state:
+// that's what the event does to it, and it needs no reducer. Other
+// states that care about the event are updated with Reduces.
 func NewState[S any](e *Engine, name string, initial func() S) State[S] {
 	e.RegisterState(name, func() interface{} { return initial() })
+	registry := e.states[name]
+	registry.apply = func(state interface{}, event Event) (interface{}, bool) {
+		applier, ok := event.(Applier[S])
+		if !ok {
+			return state, false
+		}
+		typed, _ := state.(S)
+		return applier.Apply(typed), true
+	}
+	e.states[name] = registry
 	return State[S]{e: e, name: name}
+}
+
+// Applier is an event that says what it does to a state of type S.
+type Applier[S any] interface {
+	Apply(S) S
 }
 
 // Get is the state as the event log leaves it (see GetState).
@@ -29,17 +50,22 @@ func (s State[S]) Get() S {
 // Name is the state's name.
 func (s State[S]) Name() string { return s.name }
 
-// Update is what one kind of event does to one state: see Reduces.
-type Update struct {
+// Update is what events of type T do to one state: see Reduces.
+type Update[T Event] struct {
 	state   string
 	reducer StateReducer
 }
 
 // Reduces is an Update to s: reduce folds an event of type T into it.
-// Like any reducer, it may change the state it's given.
-// Usage: When("stocked").Updates(Reduces(shelf, addItem))
-func Reduces[S any, T Event](s State[S], reduce func(S, T) S) Update {
-	return Update{state: s.name, reducer: func(_ *Engine, state interface{}, event Event) interface{} {
+// Like any reducer, it may change the state it's given. An event that
+// applies itself to s (see NewState) can't also be reduced into it.
+// Usage: On[Stocked](e).Updates(Reduces(tally, countStocked))
+func Reduces[S any, T Event](s State[S], reduce func(S, T) S) Update[T] {
+	var ev T
+	if _, applies := any(ev).(Applier[S]); applies {
+		panic(fmt.Sprintf("atmos: %T already applies itself to state %q", ev, s.name))
+	}
+	return Update[T]{state: s.name, reducer: func(_ *Engine, state interface{}, event Event) interface{} {
 		typed, _ := state.(S)
 		return reduce(typed, event.(T))
 	}}

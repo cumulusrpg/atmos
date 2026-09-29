@@ -19,18 +19,11 @@ func NewGame() *Game {
 	// Register game state; the handle is how the game's rules read it
 	g := &Game{engine: engine, state: atmos.NewState(engine, "game", NewGameState)}
 
-	// Register event handlers using fluent API
-	engine.When("game_started", func() atmos.Event { return &GameStartedEvent{} }).
-		Requires(atmos.Rule(g.notStarted)).
-		Updates(atmos.Reduces(g.state, reduceGameStarted))
-
-	engine.When("move_made", func() atmos.Event { return &MoveMadeEvent{} }).
-		Requires(atmos.Rule(g.validMove)).
-		Then(atmos.DoFunc(g.checkForWinner)).
-		Updates(atmos.Reduces(g.state, reduceMoveMade))
-
-	engine.When("game_ended", func() atmos.Event { return &GameEndedEvent{} }).
-		Updates(atmos.Reduces(g.state, reduceGameEnded))
+	// What can happen, and when it's allowed; each event applies itself
+	// to the game (see events.go)
+	atmos.On[GameStartedEvent](engine).Requires(g.notStarted)
+	atmos.On[MoveMadeEvent](engine).Requires(g.validMove).Then(g.checkForWinner)
+	atmos.On[GameEndedEvent](engine)
 
 	return g
 }
