@@ -9,29 +9,30 @@ import (
 // Game represents a tic-tac-toe game using the atmos engine
 type Game struct {
 	engine *atmos.Engine
+	state  atmos.State[GameState]
 }
 
 // NewGame creates a new tic-tac-toe game
 func NewGame() *Game {
 	engine := atmos.NewEngine()
 
-	// Register game state
-	engine.RegisterState("game", func() interface{} { return NewGameState() })
+	// Register game state; the handle is how the game's rules read it
+	g := &Game{engine: engine, state: atmos.NewState(engine, "game", NewGameState)}
 
 	// Register event handlers using fluent API
 	engine.When("game_started", func() atmos.Event { return &GameStartedEvent{} }).
-		Requires(atmos.Valid(&GameNotStarted{})).
-		Updates("game", ReduceGameStarted)
+		Requires(atmos.Rule(g.notStarted)).
+		Updates(atmos.Reduces(g.state, reduceGameStarted))
 
 	engine.When("move_made", func() atmos.Event { return &MoveMadeEvent{} }).
-		Requires(atmos.Valid(&ValidMove{})).
-		Then(atmos.Do(&CheckForWinner{})).
-		Updates("game", ReduceMoveMade)
+		Requires(atmos.Rule(g.validMove)).
+		Then(atmos.DoFunc(g.checkForWinner)).
+		Updates(atmos.Reduces(g.state, reduceMoveMade))
 
 	engine.When("game_ended", func() atmos.Event { return &GameEndedEvent{} }).
-		Updates("game", ReduceGameEnded)
+		Updates(atmos.Reduces(g.state, reduceGameEnded))
 
-	return &Game{engine: engine}
+	return g
 }
 
 // StartGame begins a new game
@@ -77,7 +78,7 @@ func (g *Game) MakeMove(player string, position int) error {
 
 // GetGameState returns the current game state
 func (g *Game) GetGameState() GameState {
-	return g.engine.GetState("game").(GameState)
+	return g.state.Get()
 }
 
 // GetBoard returns a string representation of the board

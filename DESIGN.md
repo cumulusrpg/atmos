@@ -108,10 +108,10 @@ assumes conflicts are rare. This is what Postgres does (MVCC).
 
 ### 1. Eager Reduction
 
-**Current:** `GetState` replays all events through reducers on every call. O(n).
-
-**Desired:** Keep running state in memory. Apply each event's reducer once on commit.
-`GetState` returns current in-memory state. O(1).
+**Done.** The engine keeps each state in memory and reduces each event once, as
+it's staged; `GetState` returns the current state. States are registered with a
+factory, and anything that undoes a reduced event (a refused batch, a replaced
+log, a snapshot change) rebuilds them from fresh initial values and the log.
 
 Needed for: NATS-driven subscribers that maintain state without full replay.
 

@@ -69,8 +69,8 @@ engine.When("order_placed", func() atmos.Event { return &OrderPlacedEvent{} }).
         atmos.Do(&NotifyWarehouse{}),
         atmos.Do(&SendConfirmationEmail{}),
     ).
-    Updates("orders", ReduceOrderPlaced).
-    Updates("inventory", ReduceInventoryReserved)
+    Updates(atmos.Reduces(orders, reduceOrderPlaced)).
+    Updates(atmos.Reduces(inventory, reduceInventoryReserved))
 ```
 
 **Every rule is visible.** No hidden logic. No surprises.
@@ -148,8 +148,9 @@ Here's a simple inventory system in ~30 lines:
 package main
 
 import (
+    "fmt"
+
     "github.com/cumulusrpg/atmos"
-    "time"
 )
 
 // 1. Define events (immutable facts)
@@ -165,48 +166,49 @@ type InventoryState struct {
     Items map[string]int
 }
 
-// 3. Create validators (business rules)
-type PositiveQuantity struct{}
-
-func (v *PositiveQuantity) ValidateTyped(engine *atmos.Engine, event ItemAddedEvent) bool {
-    return event.Quantity > 0
-}
-
-// 4. Create reducers (state changes)
-func ReduceItemAdded(engine *atmos.Engine, state interface{}, event atmos.Event) interface{} {
-    s := state.(InventoryState)
-    e := event.(ItemAddedEvent)
+// 3. Create reducers (state changes)
+func reduceItemAdded(s InventoryState, e ItemAddedEvent) InventoryState {
     s.Items[e.ItemID] += e.Quantity
     return s
 }
 
-// 5. Wire it together with the fluent API
-func NewInventorySystem() *atmos.Engine {
-    engine := atmos.NewEngine()
+// 4. Hold the engine and its state handles; rules are methods
+type Inventory struct {
+    engine *atmos.Engine
+    stock  atmos.State[InventoryState]
+}
 
-    engine.RegisterState("inventory", func() interface{} {
-        return InventoryState{Items: make(map[string]int)}
-    })
+func (i *Inventory) positiveQuantity(event ItemAddedEvent) bool {
+    return event.Quantity > 0
+}
+
+// 5. Wire it together with the fluent API
+func NewInventory() *Inventory {
+    engine := atmos.NewEngine()
+    i := &Inventory{
+        engine: engine,
+        stock: atmos.NewState(engine, "inventory", func() InventoryState {
+            return InventoryState{Items: make(map[string]int)}
+        }),
+    }
 
     engine.When("item_added", func() atmos.Event { return &ItemAddedEvent{} }).
-        Requires(atmos.Valid(&PositiveQuantity{})).
-        Updates("inventory", ReduceItemAdded)
+        Requires(atmos.Rule(i.positiveQuantity)).
+        Updates(atmos.Reduces(i.stock, reduceItemAdded))
 
-    return engine
+    return i
 }
 
 // 6. Use it
 func main() {
-    system := NewInventorySystem()
+    inventory := NewInventory()
 
-    system.Emit(ItemAddedEvent{
+    inventory.engine.Emit(ItemAddedEvent{
         ItemID:   "WIDGET-001",
         Quantity: 100,
-        Time:     time.Now(),
     })
 
-    state := system.GetState("inventory").(InventoryState)
-    fmt.Printf("Inventory: %+v\n", state.Items)
+    fmt.Printf("Inventory: %+v\n", inventory.stock.Get().Items)
     // Output: Inventory: map[WIDGET-001:100]
 }
 ```
@@ -238,10 +240,7 @@ Events are:
 State is **derived from events** by reducers, each folding one event into the state:
 
 ```go
-func ReduceOrderPlaced(engine *atmos.Engine, state interface{}, event atmos.Event) interface{} {
-    s := state.(OrderState)
-    e := event.(OrderPlacedEvent)
-
+func reduceOrderPlaced(s OrderState, e OrderPlacedEvent) OrderState {
     s.Orders[e.OrderID] = Order{
         ID:         e.OrderID,
         CustomerID: e.CustomerID,
@@ -254,23 +253,28 @@ func ReduceOrderPlaced(engine *atmos.Engine, state interface{}, event atmos.Even
 }
 ```
 
-A state is registered with a function that makes its initial value. The engine
+A state is registered with a function that makes its initial value, and
+`atmos.NewState` returns its handle: `orders.Get()` reads it, and
+`Updates(atmos.Reduces(orders, reduceOrderPlaced))` attaches a reducer — both
+typed, with no name to look up and no cast. A handle is bound to its engine, so
+it lives with whatever wires the engine. The engine
 keeps each state current, reducing every event once, as it's emitted, so
 reading a state doesn't replay the log. A reducer may change the state it's
-given, as `ReduceOrderPlaced` does: whenever an event is undone (a refused
+given, as `reduceOrderPlaced` does: whenever an event is undone (a refused
 batch, say), the engine throws the state away and rebuilds it from a new
-initial value and the log. The state `GetState` returns is the engine's own:
-read it, don't change it.
+initial value and the log. The state `Get` returns is the engine's own: read
+it, don't change it.
 
 ### Validators
 
-Validators **enforce business rules** before events commit:
+Validators **enforce business rules** before events commit. The simplest is a
+method on whatever holds the engine's handles, so it reaches them — and any
+configuration — through its receiver:
 
 ```go
-type SufficientInventory struct{}
-
-func (v *SufficientInventory) ValidateTyped(engine *atmos.Engine, event OrderPlacedEvent) bool {
-    inventory := engine.GetState("inventory").(InventoryState)
+// Requires(atmos.Rule(shop.sufficientInventory))
+func (shop *Shop) sufficientInventory(event OrderPlacedEvent) bool {
+    inventory := shop.inventory.Get()
 
     for _, item := range event.Items {
         available := inventory.Items[item.ProductID]
@@ -282,6 +286,9 @@ func (v *SufficientInventory) ValidateTyped(engine *atmos.Engine, event OrderPla
     return true
 }
 ```
+
+A validator can also be a function of the engine and the event
+(`atmos.ValidFunc`), or a type with a `ValidateTyped` method (`atmos.Valid`).
 
 If **any** validator returns false, the event is rejected and nothing happens.
 
@@ -342,9 +349,9 @@ engine.When("order_placed", func() atmos.Event { return &OrderPlacedEvent{} }).
         atmos.Do(&SendConfirmationEmail{}),
         atmos.Do(&NotifyWarehouse{}),
     ).
-    Updates("orders", ReduceOrderPlaced).
-    Updates("inventory", ReduceInventoryReserved).
-    Updates("payments", ReducePaymentProcessed)
+    Updates(atmos.Reduces(orders, reduceOrderPlaced)).
+    Updates(atmos.Reduces(inventory, reduceInventoryReserved)).
+    Updates(atmos.Reduces(payments, reducePaymentProcessed))
 ```
 
 **Everything about this event is visible in one declaration.**
@@ -356,7 +363,8 @@ engine.When("order_placed", func() atmos.Event { return &OrderPlacedEvent{} }).
 - `Except(validator, condition, reason)` - Document exceptions to rules
 - `Before(...hooks)` - Run before commit (transactional)
 - `Then(...listeners)` - Run after commit (side effects)
-- `Updates(stateName, reducer)` - Update state in response to event
+- `Updates(atmos.Reduces(state, reducer))` - Update a state, through its handle, in response to event
+- `WithReducer(stateName, reducer)` - The same, untyped, by the state's name
 
 ## Advanced Features
 
@@ -482,10 +490,10 @@ One event can update multiple states:
 
 ```go
 engine.When("order_placed").
-    Updates("orders", ReduceOrderPlaced).
-    Updates("inventory", ReduceInventoryReserved).
-    Updates("customers", ReduceCustomerOrderCount).
-    Updates("analytics", ReduceOrderMetrics)
+    Updates(atmos.Reduces(orders, reduceOrderPlaced)).
+    Updates(atmos.Reduces(inventory, reduceInventoryReserved)).
+    Updates(atmos.Reduces(customers, reduceCustomerOrderCount)).
+    Updates(atmos.Reduces(analytics, reduceOrderMetrics))
 ```
 
 Each reducer sees the event and updates its own state independently.

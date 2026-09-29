@@ -102,7 +102,7 @@ func TestRepositoryUsedForStateReplay(t *testing.T) {
 
 	// Register a reducer
 	engine.When("test_event", func() Event { return &TestEvent{} }).
-		Updates("counter", func(e *Engine, state interface{}, event Event) interface{} {
+		WithReducer("counter", func(e *Engine, state interface{}, event Event) interface{} {
 			s := state.(CountState)
 			s.Count++
 			return s

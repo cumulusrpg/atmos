@@ -1,12 +1,7 @@
 package tictactoe
 
-import "github.com/cumulusrpg/atmos"
-
-// ReduceGameStarted updates state when game starts
-func ReduceGameStarted(engine *atmos.Engine, state interface{}, event atmos.Event) interface{} {
-	s := state.(GameState)
-	e := event.(GameStartedEvent)
-
+// reduceGameStarted updates state when game starts
+func reduceGameStarted(s GameState, e GameStartedEvent) GameState {
 	s.GameStarted = true
 	s.PlayerXName = e.PlayerX
 	s.PlayerOName = e.PlayerO
@@ -15,11 +10,8 @@ func ReduceGameStarted(engine *atmos.Engine, state interface{}, event atmos.Even
 	return s
 }
 
-// ReduceMoveMade updates state when a move is made
-func ReduceMoveMade(engine *atmos.Engine, state interface{}, event atmos.Event) interface{} {
-	s := state.(GameState)
-	e := event.(MoveMadeEvent)
-
+// reduceMoveMade updates state when a move is made
+func reduceMoveMade(s GameState, e MoveMadeEvent) GameState {
 	// Make the move
 	s.Board[e.Position] = e.Player
 
@@ -33,11 +25,8 @@ func ReduceMoveMade(engine *atmos.Engine, state interface{}, event atmos.Event) 
 	return s
 }
 
-// ReduceGameEnded updates state when game ends
-func ReduceGameEnded(engine *atmos.Engine, state interface{}, event atmos.Event) interface{} {
-	s := state.(GameState)
-	e := event.(GameEndedEvent)
-
+// reduceGameEnded updates state when game ends
+func reduceGameEnded(s GameState, e GameEndedEvent) GameState {
 	s.Winner = e.Winner
 
 	return s

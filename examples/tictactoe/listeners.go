@@ -4,13 +4,9 @@ import (
 	"github.com/cumulusrpg/atmos"
 )
 
-// CheckForWinner checks if the game is over after each move
-type CheckForWinner struct{}
-
-func (l *CheckForWinner) HandleTyped(engine *atmos.Engine, event MoveMadeEvent) {
-	state := engine.GetState("game").(GameState)
-
-	winner := state.CheckWinner()
+// checkForWinner checks if the game is over after each move
+func (g *Game) checkForWinner(engine *atmos.Engine, event MoveMadeEvent) {
+	winner := g.state.Get().CheckWinner()
 	if winner != "" {
 		// Emit game ended event
 		engine.Emit(GameEndedEvent{
