@@ -97,7 +97,7 @@ func TestRepositoryUsedForStateReplay(t *testing.T) {
 		Count int
 	}
 
-	engine.RegisterState("counter", CountState{Count: 0})
+	engine.RegisterState("counter", func() interface{} { return CountState{Count: 0} })
 	engine.RegisterEventType("test_event", func() Event { return &TestEvent{} })
 
 	// Register a reducer

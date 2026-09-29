@@ -15,8 +15,8 @@ type StateReducer func(engine *Engine, state interface{}, event Event) interface
 
 // StateRegistry holds state and its reducers
 type StateRegistry struct {
-	InitialState interface{}
-	Reducers     map[string]StateReducer // event type -> reducer function
+	Initial  func() interface{}      // a new initial state, each time it's called
+	Reducers map[string]StateReducer // event type -> reducer function
 }
 
 // Engine coordinates event emission, validation, and commitment
@@ -32,6 +32,12 @@ type Engine struct {
 
 	batch   []Event // events validated but not yet committed (see EmitAll)
 	inBatch bool
+
+	// current is every state as the log, and the batch so far, leave
+	// it: each event is reduced once, as it's staged. nil means it has
+	// to be rebuilt from the log — at first, and whenever something
+	// has been reduced that didn't happen.
+	current map[string]interface{}
 }
 
 // EngineOption configures engine construction
@@ -91,13 +97,17 @@ func (e *Engine) RegisterEventType(eventType string, factory func() Event) {
 	e.eventFactories[eventType] = factory
 }
 
-// RegisterState registers a state by name with its initial value
+// RegisterState registers a state by name, with a function that makes
+// its initial value. It's called again whenever the state is rebuilt
+// from the log, so reducers may change the state they're given: no
+// state is ever reused once something it was reduced from is undone.
 // Reducers should be attached via the fluent API using Updates()
-func (e *Engine) RegisterState(name string, initialState interface{}) {
+func (e *Engine) RegisterState(name string, initial func() interface{}) {
 	e.states[name] = StateRegistry{
-		InitialState: initialState,
-		Reducers:     make(map[string]StateReducer),
+		Initial:  initial,
+		Reducers: make(map[string]StateReducer),
 	}
+	e.current = nil
 }
 
 // RegisterService registers a service (reference data/utilities) in the service locator
@@ -110,35 +120,52 @@ func (e *Engine) GetService(name string) interface{} {
 	return e.services[name]
 }
 
-// GetState runs reducers on the current event log for a state
-// If the repository supports snapshots and a snapshot exists, it starts from the snapshot
-// merged over the initial state (partial snapshots are supported).
+// GetState is a state as the event log leaves it — while a batch is
+// being validated, as the batch so far leaves it. Events are reduced as
+// they're staged, so reading a state doesn't replay the log; it's
+// rebuilt from the log only the first time, and after anything that
+// was reduced is undone (a refused batch, a replaced log, a changed
+// snapshot or reducer). The engine is taken to be the only writer to
+// its repository while it's in use.
+//
+// The state returned is the engine's own: callers mustn't change it.
 func (e *Engine) GetState(name string) interface{} {
-	registry, exists := e.states[name]
-	if !exists {
+	if _, exists := e.states[name]; !exists {
 		return nil
 	}
-
-	// Start with initial state
-	state := registry.InitialState
-
-	// Check if repository supports snapshots and has one for this state
-	if snapshotRepo, ok := e.repository.(types.SnapshotRepository); ok {
-		if snapshotData, hasSnapshot := snapshotRepo.GetSnapshot(name); hasSnapshot {
-			// Merge snapshot over initial state (supports partial snapshots)
-			state = e.mergeSnapshot(state, snapshotData)
-		}
+	if e.current == nil {
+		e.rebuild()
 	}
+	return e.current[name]
+}
 
-	// Apply events, and the batch in progress, if any
+// rebuild reduces every state from a new initial value — or a snapshot
+// merged over one (partial snapshots are supported) — through the log
+// and the batch so far.
+func (e *Engine) rebuild() {
+	current := make(map[string]interface{}, len(e.states))
+	for name, registry := range e.states {
+		state := registry.Initial()
+		if snapshotRepo, ok := e.repository.(types.SnapshotRepository); ok {
+			if snapshotData, hasSnapshot := snapshotRepo.GetSnapshot(name); hasSnapshot {
+				state = e.mergeSnapshot(state, snapshotData)
+			}
+		}
+		current[name] = state
+	}
+	e.current = current
 	for _, event := range e.GetEvents() {
-		reducer, hasReducer := registry.Reducers[event.Type()]
-		if hasReducer {
-			state = reducer(e, state, event)
+		e.reduce(event)
+	}
+}
+
+// reduce folds one event into every state that has a reducer for it.
+func (e *Engine) reduce(event Event) {
+	for name, registry := range e.states {
+		if reducer, hasReducer := registry.Reducers[event.Type()]; hasReducer {
+			e.current[name] = reducer(e, e.current[name], event)
 		}
 	}
-
-	return state
 }
 
 // Emit attempts to emit an event through validation and commitment.
@@ -164,6 +191,9 @@ func (e *Engine) EmitAll(events ...Event) bool {
 	mark := len(e.batch)
 	for _, event := range events {
 		if !e.stage(event) {
+			if len(e.batch) > mark {
+				e.current = nil // what was reduced from the dropped events didn't happen
+			}
 			e.batch = e.batch[:mark]
 			if outer {
 				e.inBatch = false
@@ -179,6 +209,7 @@ func (e *Engine) EmitAll(events ...Event) bool {
 
 	for _, event := range batch {
 		if err := e.repository.Add(e, event); err != nil {
+			e.current = nil
 			return false // persistence failure
 		}
 	}
@@ -227,6 +258,9 @@ func (e *Engine) stage(event Event) bool {
 	}
 
 	e.batch = append(e.batch, event)
+	if e.current != nil {
+		e.reduce(event)
+	}
 	return true
 }
 
@@ -239,6 +273,7 @@ func (e *Engine) GetEvents() []Event {
 // SetEvents sets the events directly (for rebuilding from event log)
 // Panics if the repository fails to set events
 func (e *Engine) SetEvents(events []Event) {
+	e.current = nil
 	if err := e.repository.SetAll(e, events); err != nil {
 		panic("failed to set events in repository: " + err.Error())
 	}
@@ -315,6 +350,7 @@ func (e *Engine) SetSnapshot(stateName string, snapshot interface{}) error {
 		return err
 	}
 
+	e.current = nil
 	return snapshotRepo.SetSnapshot(stateName, data)
 }
 
@@ -326,6 +362,7 @@ func (e *Engine) ClearSnapshot(stateName string) error {
 		return errors.New("repository does not support snapshots")
 	}
 
+	e.current = nil
 	return snapshotRepo.ClearSnapshot(stateName)
 }
 

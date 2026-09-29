@@ -16,7 +16,7 @@ func NewGame() *Game {
 	engine := atmos.NewEngine()
 
 	// Register game state
-	engine.RegisterState("game", NewGameState())
+	engine.RegisterState("game", func() interface{} { return NewGameState() })
 
 	// Register event handlers using fluent API
 	engine.When("game_started", func() atmos.Event { return &GameStartedEvent{} }).
