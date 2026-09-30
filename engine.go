@@ -312,7 +312,10 @@ func (e *Engine) MarshalEvents(events []Event) ([]byte, error) {
 
 // UnmarshalEvents deserializes JSON into events using registered event types
 func (e *Engine) UnmarshalEvents(jsonData []byte) ([]Event, error) {
-	var wrappers []EventWrapper
+	var wrappers []struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
 	if err := json.Unmarshal(jsonData, &wrappers); err != nil {
 		return nil, err
 	}
@@ -321,11 +324,7 @@ func (e *Engine) UnmarshalEvents(jsonData []byte) ([]Event, error) {
 	for _, wrapper := range wrappers {
 		// Events declared with On decode as their own type
 		if decode, declared := e.eventDecoders[wrapper.Type]; declared {
-			eventJSON, err := json.Marshal(wrapper.Data)
-			if err != nil {
-				continue
-			}
-			if event, err := decode(eventJSON); err == nil {
+			if event, err := decode(wrapper.Data); err == nil {
 				events = append(events, event)
 			}
 			continue
@@ -339,16 +338,9 @@ func (e *Engine) UnmarshalEvents(jsonData []byte) ([]Event, error) {
 
 		// Create new event instance and unmarshal into it
 		event := factory()
-		eventJSON, err := json.Marshal(wrapper.Data)
-		if err != nil {
-			continue // Skip events that can't be re-marshaled
-		}
-
-		if err := json.Unmarshal(eventJSON, event); err != nil {
+		if err := json.Unmarshal(wrapper.Data, event); err != nil {
 			continue // Skip events that can't be unmarshaled
 		}
-
-		// If event is a pointer, dereference it before adding
 		events = append(events, event)
 	}
 

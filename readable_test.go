@@ -139,3 +139,64 @@ func TestCommand_AnUndeclaredCommandIsAWiringMistake(t *testing.T) {
 
 	assert.Panics(t, func() { k.e.Do(struct{ Stir bool }{true}) })
 }
+
+func TestOn_BeforeHooksRunInTheEventsBatch(t *testing.T) {
+	k := newKitchen(3)
+	// Filling a jar spills one into the tray, as part of the same act.
+	On[Filled](k.e).Before(func(ev Filled) {
+		if ev.Jar != "tray" {
+			k.e.Emit(Filled{"tray", 1})
+		}
+	})
+
+	assert.True(t, k.e.Emit(Filled{"a", 1}))
+	assert.Equal(t, []Event{Filled{"tray", 1}, Filled{"a", 1}}, k.e.GetEvents(), "the spill lands ahead of the fill")
+	assert.Equal(t, Jars{"a": 1, "tray": 1}, k.jars.Get())
+}
+
+// Spilled is declared as a pointer, the way events registered with a
+// factory often are.
+type Spilled struct{ Jar string }
+
+func (*Spilled) Type() string { return "spilled" }
+
+func TestOn_PointerEventsComeBackFromJSONAsPointers(t *testing.T) {
+	k := newKitchen(3)
+	On[*Spilled](k.e)
+	k.e.Emit(&Spilled{"a"})
+
+	data, _ := k.e.MarshalEvents(k.e.GetEvents())
+	events, err := k.e.UnmarshalEvents(data)
+
+	assert.NoError(t, err)
+	assert.Equal(t, []Event{&Spilled{"a"}}, events)
+}
+
+func TestOn_AStoredEventThatDoesntDecodeIsSkipped(t *testing.T) {
+	k := newKitchen(3)
+
+	events, err := k.e.UnmarshalEvents([]byte(`[{"type":"filled","data":{"Jar":"a","N":"two"}},{"type":"filled","data":{"Jar":"b","N":2}}]`))
+
+	assert.NoError(t, err)
+	assert.Equal(t, []Event{Filled{"b", 2}}, events)
+}
+
+func TestApply_AStateIgnoresEventsThatDontApplyToIt(t *testing.T) {
+	k := newKitchen(3)
+	spills := NewState(k.e, "spills", func() int { return 0 })
+
+	k.e.Emit(Filled{"a", 1})
+
+	assert.Equal(t, 0, spills.Get())
+	assert.Equal(t, Jars{"a": 1}, k.jars.Get())
+}
+
+func TestUnmarshalEvents_UnknownOrUndecodableEventsAreSkipped(t *testing.T) {
+	engine := NewEngine()
+	engine.When("item_put", func() Event { return &ItemPutEvent{} })
+
+	events, err := engine.UnmarshalEvents([]byte(`[{"type":"mystery","data":{}},{"type":"item_put","data":"not an event"},{"type":"item_put","data":{"Shelf":"a","Item":"cup"}}]`))
+
+	assert.NoError(t, err)
+	assert.Equal(t, []Event{&ItemPutEvent{"a", "cup"}}, events)
+}
