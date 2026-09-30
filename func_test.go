@@ -28,3 +28,17 @@ func TestDoFunc_APlainFunctionIsAListener(t *testing.T) {
 
 	assert.Equal(t, []string{"ORD-1"}, heard)
 }
+
+type recordOrder struct{ heard *[]string }
+
+func (r recordOrder) HandleTyped(_ *Engine, ev OrderPlacedEvent) { *r.heard = append(*r.heard, ev.OrderID) }
+
+func TestDo_ATypedListenerTypeIsAListener(t *testing.T) {
+	engine := NewEngine()
+	var heard []string
+	engine.When("order_placed").Then(Do[OrderPlacedEvent](recordOrder{&heard}))
+
+	engine.Emit(OrderPlacedEvent{OrderID: "ORD-1"})
+
+	assert.Equal(t, []string{"ORD-1"}, heard)
+}

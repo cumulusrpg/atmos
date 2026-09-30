@@ -17,18 +17,24 @@ type StateReducer func(engine *Engine, state interface{}, event Event) interface
 type StateRegistry struct {
 	Initial  func() interface{}      // a new initial state, each time it's called
 	Reducers map[string]StateReducer // event type -> reducer function
+
+	// apply folds an event that applies itself to this state (see
+	// NewState); ok is false if it doesn't.
+	apply func(state interface{}, event Event) (next interface{}, ok bool)
 }
 
 // Engine coordinates event emission, validation, and commitment
 type Engine struct {
-	repository     types.EventRepository           // event storage abstraction
-	validators     map[string][]EventValidator     // event type -> validators
-	exceptions     map[string][]ValidatorException // event type -> validator exceptions
-	beforeHooks    map[string][]EventListener      // event type -> pre-commit hooks
-	listeners      map[string][]EventListener      // event type -> listeners
-	states         map[string]StateRegistry        // state name -> state registry
-	eventFactories map[string]func() Event         // event type -> factory function
-	services       map[string]interface{}          // service name -> service instance (service locator)
+	repository     types.EventRepository                  // event storage abstraction
+	validators     map[string][]EventValidator            // event type -> validators
+	exceptions     map[string][]ValidatorException        // event type -> validator exceptions
+	beforeHooks    map[string][]EventListener             // event type -> pre-commit hooks
+	listeners      map[string][]EventListener             // event type -> listeners
+	states         map[string]StateRegistry               // state name -> state registry
+	eventFactories map[string]func() Event                // event type -> factory function
+	eventDecoders  map[string]func([]byte) (Event, error) // event type -> decoder (see On)
+	commands       map[reflect.Type]func(any) []Event     // command type -> decision (see Command)
+	services       map[string]interface{}                 // service name -> service instance (service locator)
 
 	batch   []Event // events validated but not yet committed (see EmitAll)
 	inBatch bool
@@ -60,6 +66,8 @@ func NewEngine(opts ...EngineOption) *Engine {
 		listeners:      make(map[string][]EventListener),
 		states:         make(map[string]StateRegistry),
 		eventFactories: make(map[string]func() Event),
+		eventDecoders:  make(map[string]func([]byte) (Event, error)),
+		commands:       make(map[reflect.Type]func(any) []Event),
 		services:       make(map[string]interface{}),
 	}
 
@@ -164,6 +172,10 @@ func (e *Engine) reduce(event Event) {
 	for name, registry := range e.states {
 		if reducer, hasReducer := registry.Reducers[event.Type()]; hasReducer {
 			e.current[name] = reducer(e, e.current[name], event)
+		} else if registry.apply != nil {
+			if next, ok := registry.apply(e.current[name], event); ok {
+				e.current[name] = next
+			}
 		}
 	}
 }
@@ -300,13 +312,24 @@ func (e *Engine) MarshalEvents(events []Event) ([]byte, error) {
 
 // UnmarshalEvents deserializes JSON into events using registered event types
 func (e *Engine) UnmarshalEvents(jsonData []byte) ([]Event, error) {
-	var wrappers []EventWrapper
+	var wrappers []struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
 	if err := json.Unmarshal(jsonData, &wrappers); err != nil {
 		return nil, err
 	}
 
 	var events []Event
 	for _, wrapper := range wrappers {
+		// Events declared with On decode as their own type
+		if decode, declared := e.eventDecoders[wrapper.Type]; declared {
+			if event, err := decode(wrapper.Data); err == nil {
+				events = append(events, event)
+			}
+			continue
+		}
+
 		// Get factory for this event type
 		factory, exists := e.eventFactories[wrapper.Type]
 		if !exists {
@@ -315,16 +338,9 @@ func (e *Engine) UnmarshalEvents(jsonData []byte) ([]Event, error) {
 
 		// Create new event instance and unmarshal into it
 		event := factory()
-		eventJSON, err := json.Marshal(wrapper.Data)
-		if err != nil {
-			continue // Skip events that can't be re-marshaled
-		}
-
-		if err := json.Unmarshal(eventJSON, event); err != nil {
+		if err := json.Unmarshal(wrapper.Data, event); err != nil {
 			continue // Skip events that can't be unmarshaled
 		}
-
-		// If event is a pointer, dereference it before adding
 		events = append(events, event)
 	}
 
