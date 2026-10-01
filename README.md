@@ -4,7 +4,7 @@
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 **Go** &nbsp;
-[![Go Report Card](https://goreportcard.com/badge/github.com/cumulusrpg/atmos)](https://goreportcard.com/report/github.com/cumulusrpg/atmos)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cumulusrpg/atmos.svg)](https://pkg.go.dev/github.com/cumulusrpg/atmos)
 [![codecov (Go)](https://codecov.io/gh/cumulusrpg/atmos/branch/main/graph/badge.svg?flag=go)](https://codecov.io/gh/cumulusrpg/atmos)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/cumulusrpg/atmos)](https://github.com/cumulusrpg/atmos/blob/main/go.mod)
 
