@@ -47,7 +47,7 @@ Listeners trigger side effects after events:
 
 ### 6. Game Setup (game.go)
 
-The game uses Atmos's fluent API to wire everything together:
+The game declares, in one place, what can happen and when it's allowed:
 
 ```go
 atmos.On[GameStartedEvent](engine).Requires(g.notStarted)
@@ -67,9 +67,10 @@ Invalid moves are rejected before being added to the event log, ensuring game ru
 The `CheckForWinner` listener automatically checks for game-ending conditions after each move, demonstrating how complex game logic can be composed from simple handlers.
 
 ### Type Safety
-Using Go generics, validators and listeners are type-safe:
+Rules and listeners are plain methods of the event they're about, reaching the
+game's state through their receiver:
 ```go
-func (v *ValidMove) ValidateTyped(engine *atmos.Engine, event MoveMadeEvent) bool
+func (g *Game) validMove(event MoveMadeEvent) bool
 ```
 
 ## Example Usage

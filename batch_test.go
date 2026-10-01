@@ -12,67 +12,54 @@ import (
 
 type ItemPutEvent struct{ Shelf, Item string }
 
-func (e ItemPutEvent) Type() string { return "item_put" }
+func (ItemPutEvent) Type() string { return "item_put" }
+
+// Apply writes into the map it's given, the way Go code naturally
+// does: the engine can't count on it copying first.
+func (ev ItemPutEvent) Apply(s Shelves) Shelves { s[ev.Shelf] = ev.Item; return s }
 
 type ItemTakenEvent struct{ Shelf, Item string }
 
-func (e ItemTakenEvent) Type() string { return "item_taken" }
+func (ItemTakenEvent) Type() string { return "item_taken" }
+
+func (ev ItemTakenEvent) Apply(s Shelves) Shelves { delete(s, ev.Shelf); return s }
 
 type Shelves map[string]string // shelf -> item; absent means empty
 
-type ShelfIsEmpty struct{}
+type shelves struct {
+	e     *Engine
+	state State[Shelves]
+}
 
-func (ShelfIsEmpty) ValidateTyped(e *Engine, ev ItemPutEvent) bool {
-	_, taken := e.GetState("shelves").(Shelves)[ev.Shelf]
+func (s *shelves) isEmpty(ev ItemPutEvent) bool {
+	_, taken := s.state.Get()[ev.Shelf]
 	return !taken
 }
 
-type ShelfHoldsItem struct{}
+func (s *shelves) holdsItem(ev ItemTakenEvent) bool { return s.state.Get()[ev.Shelf] == ev.Item }
 
-func (ShelfHoldsItem) ValidateTyped(e *Engine, ev ItemTakenEvent) bool {
-	return e.GetState("shelves").(Shelves)[ev.Shelf] == ev.Item
-}
-
-func shelfEngine() *Engine {
-	engine := NewEngine()
-	engine.RegisterState("shelves", func() interface{} { return Shelves{} })
-	engine.When("item_put").
-		Requires(Valid(ShelfIsEmpty{})).
-		WithReducer("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
-			s, ev := clone(state.(Shelves)), event.(ItemPutEvent)
-			s[ev.Shelf] = ev.Item
-			return s
-		})
-	engine.When("item_taken").
-		Requires(Valid(ShelfHoldsItem{})).
-		WithReducer("shelves", func(_ *Engine, state interface{}, event Event) interface{} {
-			s, ev := clone(state.(Shelves)), event.(ItemTakenEvent)
-			delete(s, ev.Shelf)
-			return s
-		})
-	return engine
-}
-
-func clone(s Shelves) Shelves {
-	out := Shelves{}
-	for k, v := range s {
-		out[k] = v
-	}
-	return out
+func shelfEngine(opts ...EngineOption) *shelves {
+	e := NewEngine(opts...)
+	s := &shelves{e: e, state: NewState(e, "shelves", func() Shelves { return Shelves{} })}
+	On[ItemPutEvent](e).Requires(s.isEmpty)
+	On[ItemTakenEvent](e).Requires(s.holdsItem)
+	return s
 }
 
 func TestEmitAll_CommitsEveryEventInOrder(t *testing.T) {
-	engine := shelfEngine()
+	s := shelfEngine()
+	engine := s.e
 
 	ok := engine.EmitAll(ItemPutEvent{"a", "cup"}, ItemPutEvent{"b", "jar"})
 
 	assert.True(t, ok)
 	assert.Equal(t, []Event{ItemPutEvent{"a", "cup"}, ItemPutEvent{"b", "jar"}}, engine.GetEvents())
-	assert.Equal(t, Shelves{"a": "cup", "b": "jar"}, engine.GetState("shelves"))
+	assert.Equal(t, Shelves{"a": "cup", "b": "jar"}, s.state.Get())
 }
 
 func TestEmitAll_EachEventIsValidatedAfterTheOnesBeforeIt(t *testing.T) {
-	engine := shelfEngine()
+	s := shelfEngine()
+	engine := s.e
 	engine.Emit(ItemPutEvent{"a", "cup"})
 
 	// Alone, putting a jar on shelf a is refused: it's full. After the
@@ -81,15 +68,15 @@ func TestEmitAll_EachEventIsValidatedAfterTheOnesBeforeIt(t *testing.T) {
 	ok := engine.EmitAll(ItemTakenEvent{"a", "cup"}, ItemPutEvent{"a", "jar"})
 
 	assert.True(t, ok)
-	assert.Equal(t, Shelves{"a": "jar"}, engine.GetState("shelves"))
+	assert.Equal(t, Shelves{"a": "jar"}, s.state.Get())
 }
 
 func TestEmitAll_OneRefusalAndNothingHappens(t *testing.T) {
-	engine := shelfEngine()
+	s := shelfEngine()
+	engine := s.e
 	engine.Emit(ItemPutEvent{"a", "cup"})
 	var heard []Event
-	engine.RegisterListener("item_taken", NewTypedListener(
-		TypedListenerFunc[ItemTakenEvent](func(_ *Engine, ev ItemTakenEvent) { heard = append(heard, ev) })))
+	On[ItemTakenEvent](engine).Then(func(ev ItemTakenEvent) { heard = append(heard, ev) })
 	engine.Emit(ItemPutEvent{"b", "jar"})
 	before := engine.GetEvents()
 
@@ -99,16 +86,16 @@ func TestEmitAll_OneRefusalAndNothingHappens(t *testing.T) {
 
 	assert.False(t, ok)
 	assert.Equal(t, before, engine.GetEvents(), "the log is untouched")
-	assert.Equal(t, Shelves{"a": "cup", "b": "jar"}, engine.GetState("shelves"), "so is the state")
+	assert.Equal(t, Shelves{"a": "cup", "b": "jar"}, s.state.Get(), "so is the state")
 	assert.Empty(t, heard, "and no listener heard the refused batch")
 }
 
 func TestEmitAll_ListenersRunOnlyOnceTheWholeBatchIsIn(t *testing.T) {
-	engine := shelfEngine()
+	s := shelfEngine()
+	engine := s.e
 	engine.Emit(ItemPutEvent{"a", "cup"})
 	var seen Shelves
-	engine.RegisterListener("item_taken", NewTypedListener(
-		TypedListenerFunc[ItemTakenEvent](func(e *Engine, _ ItemTakenEvent) { seen = e.GetState("shelves").(Shelves) })))
+	On[ItemTakenEvent](engine).Then(func(ItemTakenEvent) { seen = s.state.Get() })
 
 	engine.EmitAll(ItemTakenEvent{"a", "cup"}, ItemPutEvent{"b", "cup"})
 
@@ -116,15 +103,15 @@ func TestEmitAll_ListenersRunOnlyOnceTheWholeBatchIsIn(t *testing.T) {
 }
 
 func TestEmitAll_ABeforeHooksEmitsBelongToTheBatch(t *testing.T) {
-	engine := shelfEngine()
+	s := shelfEngine()
+	engine := s.e
 	engine.Emit(ItemPutEvent{"b", "jar"})
 	// Putting a cup on a also puts a saucer on c, as part of the same act.
-	engine.When("item_put").Before(NewTypedListener(
-		TypedListenerFunc[ItemPutEvent](func(e *Engine, ev ItemPutEvent) {
-			if ev.Item == "cup" {
-				e.Emit(ItemPutEvent{"c", "saucer"})
-			}
-		})))
+	On[ItemPutEvent](engine).Before(func(ev ItemPutEvent) {
+		if ev.Item == "cup" {
+			engine.Emit(ItemPutEvent{"c", "saucer"})
+		}
+	})
 	before := engine.GetEvents()
 
 	ok := engine.EmitAll(ItemPutEvent{"a", "cup"}, ItemPutEvent{"b", "cup"})
@@ -135,35 +122,35 @@ func TestEmitAll_ABeforeHooksEmitsBelongToTheBatch(t *testing.T) {
 }
 
 func TestEmitAll_ARefusedNestedEmitDropsOnlyItsOwnEvents(t *testing.T) {
-	engine := shelfEngine()
+	s := shelfEngine()
+	engine := s.e
 	engine.Emit(ItemPutEvent{"c", "plate"})
 	var nested bool
-	engine.When("item_put").Before(NewTypedListener(
-		TypedListenerFunc[ItemPutEvent](func(e *Engine, ev ItemPutEvent) {
-			if ev.Item == "cup" {
-				nested = e.Emit(ItemPutEvent{"c", "saucer"}) // c is taken
-			}
-		})))
+	On[ItemPutEvent](engine).Before(func(ev ItemPutEvent) {
+		if ev.Item == "cup" {
+			nested = engine.Emit(ItemPutEvent{"c", "saucer"}) // c is taken
+		}
+	})
 
 	ok := engine.EmitAll(ItemPutEvent{"a", "cup"})
 
 	assert.True(t, ok, "the hook's refusal is the hook's business")
 	assert.False(t, nested)
-	assert.Equal(t, Shelves{"a": "cup", "c": "plate"}, engine.GetState("shelves"))
+	assert.Equal(t, Shelves{"a": "cup", "c": "plate"}, s.state.Get())
 }
 
 func TestEmitAll_AListenersEmitIsItsOwnAct(t *testing.T) {
-	engine := shelfEngine()
+	s := shelfEngine()
+	engine := s.e
 	engine.Emit(ItemPutEvent{"b", "jar"})
-	engine.RegisterListener("item_put", NewTypedListener(
-		TypedListenerFunc[ItemPutEvent](func(e *Engine, ev ItemPutEvent) {
-			if ev.Item == "cup" {
-				e.Emit(ItemPutEvent{"b", "lid"}) // refused: b is taken
-			}
-		})))
+	On[ItemPutEvent](engine).Then(func(ev ItemPutEvent) {
+		if ev.Item == "cup" {
+			engine.Emit(ItemPutEvent{"b", "lid"}) // refused: b is taken
+		}
+	})
 
 	ok := engine.EmitAll(ItemPutEvent{"a", "cup"})
 
 	assert.True(t, ok, "the batch was already in when the listener ran")
-	assert.Equal(t, Shelves{"a": "cup", "b": "jar"}, engine.GetState("shelves"))
+	assert.Equal(t, Shelves{"a": "cup", "b": "jar"}, s.state.Get())
 }
