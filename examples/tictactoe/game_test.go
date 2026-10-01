@@ -191,9 +191,9 @@ func TestEventLog(t *testing.T) {
 	assert.Equal(t, "game_ended", events[6].Type())
 
 	// Verify we can rebuild state from event log
-	newEngine := game.engine
-	newEngine.SetEvents(events)
-	rebuiltState := newEngine.GetState("game").(GameState)
+	rebuilt := NewGame()
+	rebuilt.engine.SetEvents(events)
+	rebuiltState := rebuilt.GetGameState()
 
 	assert.True(t, rebuiltState.GameStarted, "Rebuilt state should show game started")
 	assert.Equal(t, "X", rebuiltState.Winner, "Rebuilt state should show X as winner")

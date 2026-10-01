@@ -109,8 +109,8 @@ assumes conflicts are rare. This is what Postgres does (MVCC).
 ### 1. Eager Reduction
 
 **Done.** The engine keeps each state in memory and reduces each event once, as
-it's staged; `GetState` returns the current state. States are registered with a
-factory, and anything that undoes a reduced event (a refused batch, a replaced
+it's staged; a state handle's `Get` returns the current state. States are made
+with a factory, and anything that undoes a reduced event (a refused batch, a replaced
 log, a snapshot change) rebuilds them from fresh initial values and the log.
 
 Needed for: NATS-driven subscribers that maintain state without full replay.
@@ -135,7 +135,7 @@ Invalid transitions rejected automatically.
 
 ```go
 engine.RegisterProjection("catalog", func(e *Engine) interface{} {
-    return computeCatalog(e.GetState("library"))
+    return computeCatalog(library.Get())
 })
 
 engine.OnProjectionChange("catalog", func(e *Engine, result interface{}) {
@@ -168,12 +168,8 @@ Enables: NATS as durable event log, FileManager subscribes for .hoom backup.
 
 ### 5. Multi-Event Atomic Emit
 
-```go
-engine.EmitAll([]Event{e1, e2, e3})
-```
-
-All committed or none. Natural consequence of the sandbox model — just pre-populate
-the inbox with multiple events.
+**Done.** `engine.EmitAll(e1, e2, e3)` commits all or none; a command (`Do`)
+emits what it decides this way.
 
 ### 6. Validate Without Commit
 
@@ -188,11 +184,8 @@ pre-flight checks (e.g. HTTP handler validating before publishing to NATS).
 
 ## What Stays the Same
 
-- Event registration + factory functions
-- Typed validators and listeners (generics)
-- Fluent API (When...Requires...Updates...Then)
+- One way to define an engine: `NewState`, `On[T]` (Requires, Before, Then,
+  Updates), events that `Apply` themselves, `Command[C]` and `Do`
 - Repository abstraction (WithRepository)
 - Snapshot support
-- Service locator
-- EmitBuilder (fluent cross-event emission)
 - Before hooks

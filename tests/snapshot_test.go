@@ -34,12 +34,7 @@ type ScoreEvent struct {
 
 func (e ScoreEvent) Type() string { return "score" }
 
-func ReduceScore(engine *atmos.Engine, state interface{}, event atmos.Event) interface{} {
-	s := state.(GameState)
-	e := event.(ScoreEvent)
-	s.Score += e.Points
-	return s
-}
+func (e ScoreEvent) Apply(s GameState) GameState { s.Score += e.Points; return s }
 
 // =============================================================================
 // Test Context
@@ -47,6 +42,7 @@ func ReduceScore(engine *atmos.Engine, state interface{}, event atmos.Event) int
 
 type snapshotTestContext struct {
 	engine       *atmos.Engine
+	states       map[string]atmos.State[GameState]
 	snapshotRepo *repository.InMemorySnapshot
 	lastError    error
 }
@@ -68,8 +64,7 @@ func (ctx *snapshotTestContext) anEngineWithStandardRepository() error {
 }
 
 func (ctx *snapshotTestContext) aStateWithDefaultValues(stateName string, table *godog.Table) error {
-	ctx.engine.RegisterState(stateName, func() interface{} { return NewGameState() })
-	ctx.engine.When("score").WithReducer(stateName, ReduceScore)
+	ctx.states = map[string]atmos.State[GameState]{stateName: atmos.NewState(ctx.engine, stateName, NewGameState)}
 	return nil
 }
 
@@ -143,12 +138,12 @@ func (ctx *snapshotTestContext) theSnapshotForShouldContain(stateName string, ta
 }
 
 func (ctx *snapshotTestContext) theStateShouldHave(stateName string, table *godog.Table) error {
-	state := ctx.engine.GetState(stateName)
-	if state == nil {
+	state, found := ctx.states[stateName]
+	if !found {
 		return fmt.Errorf("state %q not found", stateName)
 	}
 
-	gameState := state.(GameState)
+	gameState := state.Get()
 	expected := tableToMap(table)
 
 	for field, expectedValue := range expected {

@@ -28,10 +28,10 @@ func (p *pantry) hasRoom(Stocked) bool { return len(p.shelf.Get()) < p.capacity 
 func newPantry(capacity int) *pantry {
 	e := NewEngine()
 	p := &pantry{shelf: NewState(e, "shelf", func() []string { return nil }), capacity: capacity}
-	e.When("stocked").
-		Requires(Rule(p.hasRoom)).
+	On[Stocked](e).
+		Requires(p.hasRoom).
 		Updates(Reduces(p.shelf, func(s []string, ev Stocked) []string { return append(s, ev.Item) }))
-	e.When("used").
+	On[Used](e).
 		Updates(Reduces(p.shelf, func(s []string, ev Used) []string {
 			for i, item := range s {
 				if item == ev.Item {
@@ -57,11 +57,10 @@ func TestState_AHandlesNameIsItsStatesName(t *testing.T) {
 	p := newPantry(3)
 	p.emit(Stocked{"flour"})
 
-	assert.Equal(t, "shelf", p.shelf.Name())
-	assert.Equal(t, []string{"flour"}, p.shelf.e.GetState("shelf"))
+	assert.Equal(t, "shelf", p.shelf.Name(), "what snapshots know it by")
 }
 
-func TestRule_AMethodIsARule(t *testing.T) {
+func TestOn_AMethodIsARule(t *testing.T) {
 	p := newPantry(1)
 
 	assert.True(t, p.emit(Stocked{"flour"}))

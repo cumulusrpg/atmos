@@ -26,7 +26,7 @@ func On[T Event](e *Engine) Registration[T] {
 		ev = reflect.New(t.Elem()).Interface().(T)
 	}
 	r := Registration[T]{e: e, eventType: ev.Type()}
-	e.eventDecoders[r.eventType] = decode[T]
+	e.kind(r.eventType).decode = decode[T]
 	return r
 }
 
@@ -41,8 +41,9 @@ func decode[T Event](data []byte) (Event, error) {
 
 // Requires adds rules the event must pass to be committed.
 func (r Registration[T]) Requires(rules ...func(T) bool) Registration[T] {
+	k := r.e.kind(r.eventType)
 	for _, rule := range rules {
-		r.e.RegisterValidator(r.eventType, Rule(rule))
+		k.rules = append(k.rules, func(event Event) bool { return rule(event.(T)) })
 	}
 	return r
 }
@@ -50,16 +51,18 @@ func (r Registration[T]) Requires(rules ...func(T) bool) Registration[T] {
 // Before adds hooks that run once the event has passed its rules, in
 // its batch: whatever they emit is committed with it, or not at all.
 func (r Registration[T]) Before(hooks ...func(T)) Registration[T] {
+	k := r.e.kind(r.eventType)
 	for _, hook := range hooks {
-		r.e.RegisterBeforeHook(r.eventType, listen(hook))
+		k.before = append(k.before, listen(hook))
 	}
 	return r
 }
 
 // Then adds listeners that run once the event's batch is committed.
 func (r Registration[T]) Then(listeners ...func(T)) Registration[T] {
+	k := r.e.kind(r.eventType)
 	for _, listener := range listeners {
-		r.e.RegisterListener(r.eventType, listen(listener))
+		k.then = append(k.then, listen(listener))
 	}
 	return r
 }
@@ -68,11 +71,12 @@ func (r Registration[T]) Then(listeners ...func(T)) Registration[T] {
 // one it applies itself to (see NewState).
 func (r Registration[T]) Updates(updates ...Update[T]) Registration[T] {
 	for _, update := range updates {
-		r.e.Event(r.eventType).WithReducer(update.state, update.reducer)
+		r.e.states[update.state].reducers[r.eventType] = update.reduce
 	}
+	r.e.current = nil // what's been reduced so far didn't include these
 	return r
 }
 
-func listen[T Event](handle func(T)) EventListener {
-	return DoFunc(func(_ *Engine, event T) { handle(event) })
+func listen[T Event](handle func(T)) func(Event) {
+	return func(event Event) { handle(event.(T)) }
 }

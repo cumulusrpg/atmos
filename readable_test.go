@@ -191,12 +191,11 @@ func TestApply_AStateIgnoresEventsThatDontApplyToIt(t *testing.T) {
 	assert.Equal(t, Jars{"a": 1}, k.jars.Get())
 }
 
-func TestUnmarshalEvents_UnknownOrUndecodableEventsAreSkipped(t *testing.T) {
-	engine := NewEngine()
-	engine.When("item_put", func() Event { return &ItemPutEvent{} })
+func TestUnmarshalEvents_EventsNoOneDeclaredAreSkipped(t *testing.T) {
+	k := newKitchen(3)
 
-	events, err := engine.UnmarshalEvents([]byte(`[{"type":"mystery","data":{}},{"type":"item_put","data":"not an event"},{"type":"item_put","data":{"Shelf":"a","Item":"cup"}}]`))
+	events, err := k.e.UnmarshalEvents([]byte(`[{"type":"mystery","data":{}},{"type":"filled","data":{"Jar":"b","N":2}}]`))
 
 	assert.NoError(t, err)
-	assert.Equal(t, []Event{&ItemPutEvent{"a", "cup"}}, events)
+	assert.Equal(t, []Event{Filled{"b", 2}}, events)
 }

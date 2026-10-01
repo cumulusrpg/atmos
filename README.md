@@ -93,8 +93,8 @@ Replay state at any point in history:
 
 ```go
 // Rebuild state from the first 100 events
-engine.SetEvents(events[:100])
-state := engine.GetState("orders")
+shop.engine.SetEvents(events[:100])
+state := shop.orders.Get()
 ```
 
 Perfect for:
@@ -277,10 +277,6 @@ func (shop *Shop) sufficientInventory(event OrderPlaced) bool {
 }
 ```
 
-With the untyped `engine.When(eventType)`, a validator can also be a function of
-the engine and the event (`atmos.ValidFunc`), or a type with a `ValidateTyped`
-method (`atmos.Valid`).
-
 If **any** validator returns false, the event is rejected and nothing happens.
 
 ### Listeners
@@ -348,7 +344,7 @@ Commands aren't events — they're never stored — so they can carry anything,
 behavior included. An action that's exactly one event doesn't need a command;
 emit the event.
 
-## The Fluent API
+## One Declaration
 
 Declare everything in one place — what can be done, and what can happen:
 
@@ -375,58 +371,38 @@ atmos.On[OrderPlaced](e).
 - `Then(...listeners)` - Run after commit (side effects)
 - `Updates(atmos.Reduces(state, reducer))` - Update a state other than the event's own
 
-The untyped `engine.When(eventType, factory)` chain takes validator and
-listener types, adds `Except(validator, condition, reason)` to document
-exceptions to rules, and `WithReducer(stateName, reducer)` for reducers by
-state name.
+This is the only way to define an engine: there's no untyped or by-name
+registration beside it.
 
 ## Advanced Features
-
-### Validator Exceptions
-
-Sometimes rules have exceptions. Document them explicitly:
-
-```go
-engine.When("order_placed").
-    Requires(atmos.Valid(&RequirePaymentMethod{})).
-    Except(
-        atmos.Valid(&RequirePaymentMethod{}),
-        func(e *atmos.Engine, event atmos.Event) bool {
-            order := event.(OrderPlaced)
-            return order.Total == 0  // Free orders don't need payment
-        },
-        "Free orders don't require payment method",
-    )
-```
-
-The `reason` string documents why the exception exists.
 
 ### Custom Event Repositories
 
 By default, Atmos stores events in memory. For production use, implement a custom repository to persist events automatically:
 
 ```go
-// Implement the EventRepository interface
+// Implement the EventRepository interface (types is
+// github.com/cumulusrpg/atmos/types)
 type FileRepository struct {
     filepath string
 }
 
-func (r *FileRepository) Add(engine *atmos.Engine, event atmos.Event) error {
-    // Serialize event using engine's registered event types
+func (r *FileRepository) Add(engine types.Engine, event atmos.Event) error {
+    // Serialize the event, with its type
     jsonData, _ := engine.MarshalEvents([]atmos.Event{event})
     // Append to file atomically
     return appendToFile(r.filepath, jsonData)
 }
 
-func (r *FileRepository) GetAll(engine *atmos.Engine) []atmos.Event {
+func (r *FileRepository) GetAll(engine types.Engine) []atmos.Event {
     // Load JSON from file
     jsonData := readFile(r.filepath)
-    // Deserialize using engine's registered event types
+    // Deserialize, as the event types the engine declared with On
     events, _ := engine.UnmarshalEvents(jsonData)
     return events
 }
 
-func (r *FileRepository) SetAll(engine *atmos.Engine, events []atmos.Event) error {
+func (r *FileRepository) SetAll(engine types.Engine, events []atmos.Event) error {
     // Serialize all events
     jsonData, _ := engine.MarshalEvents(events)
     // Replace file contents atomically
@@ -461,15 +437,14 @@ jsonData, _ := engine.MarshalEvents(events)
 // Save to database
 db.Save("event_log", jsonData)
 
-// Later: load and replay
-jsonData := db.Load("event_log")
-events, _ := engine.UnmarshalEvents(jsonData)
-
-newEngine := atmos.NewEngine()
-newEngine.SetEvents(events)
+// Later: load and replay, into an engine defined the same way, so it
+// knows what each event's type decodes as
+shop := NewShop()
+events, _ := shop.engine.UnmarshalEvents(db.Load("event_log"))
+shop.engine.SetEvents(events)
 
 // State is now rebuilt from history
-state := newEngine.GetState("orders")
+state := shop.orders.Get()
 ```
 
 Perfect for:
@@ -478,25 +453,24 @@ Perfect for:
 - Migrating between versions
 - Auditing and compliance
 
-### Service Locator
+### Dependencies
 
-Register reference data or utilities:
+Reference data and services belong to whatever wires the engine, next to its
+state handles. Rules and listeners are methods there, so they reach them
+through the receiver — no lookup by name, no cast:
 
 ```go
-// Register services
-productCatalog := catalog.Load()
-engine.RegisterService("catalog", productCatalog)
+type Shop struct {
+    engine  *atmos.Engine
+    orders  atmos.State[Orders]
+    catalog *catalog.ProductCatalog
+    email   EmailService
+}
 
-// Access in validators/listeners
-catalog := engine.GetService("catalog").(*catalog.ProductCatalog)
-product := catalog.GetProduct(productID)
+func (shop *Shop) knownProduct(e OrderPlaced) bool {
+    return shop.catalog.GetProduct(e.ProductID) != nil
+}
 ```
-
-Use for:
-- Reference data (product catalogs, rate tables)
-- External services (email, SMS)
-- Configuration
-- Shared utilities
 
 ### Multiple State Updates
 

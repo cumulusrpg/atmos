@@ -92,21 +92,8 @@ func TestRepositoryUsedForStateReplay(t *testing.T) {
 	customRepo := &CustomRepository{}
 	engine := NewEngine(WithRepository(customRepo))
 
-	// Register a simple state
-	type CountState struct {
-		Count int
-	}
-
-	engine.RegisterState("counter", func() interface{} { return CountState{Count: 0} })
-	engine.RegisterEventType("test_event", func() Event { return &TestEvent{} })
-
-	// Register a reducer
-	engine.When("test_event", func() Event { return &TestEvent{} }).
-		WithReducer("counter", func(e *Engine, state interface{}, event Event) interface{} {
-			s := state.(CountState)
-			s.Count++
-			return s
-		})
+	counter := NewState(engine, "counter", func() int { return 0 })
+	On[TestEvent](engine).Updates(Reduces(counter, func(n int, _ TestEvent) int { return n + 1 }))
 
 	// Emit some events
 	engine.Emit(TestEvent{Name: "event1"})
@@ -114,9 +101,8 @@ func TestRepositoryUsedForStateReplay(t *testing.T) {
 	engine.Emit(TestEvent{Name: "event3"})
 
 	// Verify state is built from repository
-	state := engine.GetState("counter").(CountState)
-	if state.Count != 3 {
-		t.Errorf("Expected count 3, got %d", state.Count)
+	if count := counter.Get(); count != 3 {
+		t.Errorf("Expected count 3, got %d", count)
 	}
 
 	// Verify repository has all events
